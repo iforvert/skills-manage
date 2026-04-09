@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::db::{self, Skill, SkillInstallation};
+use crate::db::{self, DbPool, SkillForAgent, SkillInstallation};
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,13 +39,26 @@ pub struct SkillDetail {
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
 
-/// Tauri command: return all skills installed for a given agent.
+/// Testable core implementation of `get_skills_by_agent`.
+///
+/// Returns skills for the given agent enriched with installation metadata
+/// (`dir_path`, `link_type`, `symlink_target`) so the frontend `SkillCard`
+/// can display the correct source indicator.
+pub async fn get_skills_by_agent_impl(
+    pool: &DbPool,
+    agent_id: &str,
+) -> Result<Vec<SkillForAgent>, String> {
+    db::get_skills_for_agent(pool, agent_id).await
+}
+
+/// Tauri command: return all skills installed for a given agent, including
+/// installation metadata needed by the platform-view skill cards.
 #[tauri::command]
 pub async fn get_skills_by_agent(
     state: State<'_, AppState>,
     agent_id: String,
-) -> Result<Vec<Skill>, String> {
-    db::get_skills_by_agent(&state.db, &agent_id).await
+) -> Result<Vec<SkillForAgent>, String> {
+    get_skills_by_agent_impl(&state.db, &agent_id).await
 }
 
 /// Tauri command: return all Central Skills with per-platform link status.
@@ -399,5 +412,81 @@ mod tests {
             .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
         std::fs::read_to_string(&skill.file_path)
             .map_err(|e| format!("Failed to read '{}': {}", skill.file_path, e))
+    }
+
+    // ── Regression: get_skills_by_agent_impl returns installation metadata ─────
+
+    /// `get_skills_by_agent_impl` must return `SkillForAgent` objects that
+    /// include `link_type`, `dir_path`, and `symlink_target` from the
+    /// installation record so the frontend `SkillCard` can show the correct
+    /// source indicator.
+    #[tokio::test]
+    async fn test_get_skills_by_agent_impl_includes_installation_metadata() {
+        let pool = setup_test_db().await;
+
+        let skill = make_skill("meta-skill", "Meta Skill", false);
+        db::upsert_skill(&pool, &skill).await.unwrap();
+
+        db::upsert_skill_installation(
+            &pool,
+            &SkillInstallation {
+                skill_id: "meta-skill".to_string(),
+                agent_id: "claude-code".to_string(),
+                installed_path: "/tmp/claude/meta-skill".to_string(),
+                link_type: "symlink".to_string(),
+                symlink_target: Some("/tmp/central/meta-skill".to_string()),
+            },
+        )
+        .await
+        .unwrap();
+
+        let skills = get_skills_by_agent_impl(&pool, "claude-code").await.unwrap();
+        assert_eq!(skills.len(), 1, "should find one skill for claude-code");
+
+        let s = &skills[0];
+        assert_eq!(s.id, "meta-skill");
+        assert_eq!(s.link_type, "symlink", "link_type must come from installation record");
+        assert_eq!(
+            s.dir_path, "/tmp/claude/meta-skill",
+            "dir_path must be installed_path from installation record"
+        );
+        assert_eq!(
+            s.symlink_target.as_deref(),
+            Some("/tmp/central/meta-skill"),
+            "symlink_target must be forwarded from installation record"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_skills_by_agent_impl_empty_for_unknown_agent() {
+        let pool = setup_test_db().await;
+        let skills = get_skills_by_agent_impl(&pool, "nobody").await.unwrap();
+        assert!(skills.is_empty(), "no skills for an agent with no installations");
+    }
+
+    #[tokio::test]
+    async fn test_get_skills_by_agent_impl_copy_link_type() {
+        let pool = setup_test_db().await;
+
+        let skill = make_skill("copy-skill", "Copy Skill", false);
+        db::upsert_skill(&pool, &skill).await.unwrap();
+
+        db::upsert_skill_installation(
+            &pool,
+            &SkillInstallation {
+                skill_id: "copy-skill".to_string(),
+                agent_id: "cursor".to_string(),
+                installed_path: "/tmp/cursor/copy-skill".to_string(),
+                link_type: "copy".to_string(),
+                symlink_target: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let skills = get_skills_by_agent_impl(&pool, "cursor").await.unwrap();
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].link_type, "copy");
+        assert!(skills[0].symlink_target.is_none(), "copy skills have no symlink target");
     }
 }

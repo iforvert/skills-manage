@@ -180,7 +180,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
     // ── Per-agent scans ───────────────────────────────────────────────────────
     for agent in &agents {
         let dir = Path::new(&agent.global_skills_dir);
-        let is_central = agent.id == "central";
+        let is_central = agent.category == "central";
 
         if !dir.exists() {
             // Mark agent as not detected and record zero count.
@@ -929,6 +929,78 @@ mod tests {
         assert!(
             stale_inst.is_empty(),
             "skill-remove's installation record should be removed after rescan"
+        );
+    }
+
+    // ── Regression: is_central preserved when codex shares the central dir ───
+
+    /// When a central-category agent and a coding-category agent (codex) both
+    /// point to the same directory, skills from that directory must end up with
+    /// `is_central = true` after scanning — regardless of scan order.
+    ///
+    /// Historically this failed because:
+    ///  1. The scan used `agent.id == "central"` (not `agent.category`) to set
+    ///     `is_central`, so the codex agent always cleared the flag.
+    ///  2. Even after fixing the flag, the `INSERT OR REPLACE` would overwrite
+    ///     `is_central = true` with `false` when codex was processed last.
+    #[tokio::test]
+    async fn test_is_central_preserved_when_shared_with_coding_agent() {
+        use crate::db;
+
+        let tmp = TempDir::new().unwrap();
+        let pool = setup_test_db().await;
+
+        // Insert a central-category agent pointing to the shared temp directory.
+        // Use "AA Central Test" as the display_name so it sorts BEFORE "ZZ Codex Test"
+        // (ORDER BY display_name ASC) ensuring the central scan runs first.
+        let central_agent = db::Agent {
+            id: "aa-central-test".to_string(),
+            display_name: "AA Central Test".to_string(),
+            category: "central".to_string(),
+            global_skills_dir: tmp.path().to_string_lossy().into_owned(),
+            project_skills_dir: None,
+            icon_name: None,
+            is_detected: false,
+            is_builtin: false,
+            is_enabled: true,
+        };
+        // Insert a coding-category agent pointing to the SAME temp directory,
+        // sorted AFTER the central agent so it is processed last (worst case).
+        let coding_agent = db::Agent {
+            id: "zz-codex-test".to_string(),
+            display_name: "ZZ Codex Test".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: tmp.path().to_string_lossy().into_owned(),
+            project_skills_dir: None,
+            icon_name: None,
+            is_detected: false,
+            is_builtin: false,
+            is_enabled: true,
+        };
+        db::insert_custom_agent(&pool, &central_agent).await.unwrap();
+        db::insert_custom_agent(&pool, &coding_agent).await.unwrap();
+
+        // Place one skill in the shared directory.
+        create_skill_dir(
+            tmp.path(),
+            "shared-skill",
+            &valid_skill_md("Shared Skill", "desc"),
+        );
+
+        // Run the full scan. The coding agent is processed AFTER the central agent
+        // (due to display_name ordering), which is the failure scenario for the bug.
+        scan_all_skills_impl(&pool).await.unwrap();
+
+        // The skill must still be marked as central even though the coding agent
+        // scanned the same directory afterwards.
+        let skill = db::get_skill_by_id(&pool, "shared-skill")
+            .await
+            .unwrap()
+            .expect("shared-skill must be in the DB");
+        assert!(
+            skill.is_central,
+            "skill should remain is_central=true even when a coding agent \
+             scans the same directory after the central agent"
         );
     }
 }

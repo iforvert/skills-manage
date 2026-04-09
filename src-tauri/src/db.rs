@@ -352,12 +352,27 @@ pub fn builtin_agents() -> Vec<Agent> {
 
 // ─── Skills ───────────────────────────────────────────────────────────────────
 
-/// Insert or replace a skill record.
+/// Insert or update a skill record.
+///
+/// Uses `ON CONFLICT DO UPDATE` to preserve `is_central = true` if a prior
+/// scan already marked the skill as central (e.g., when the central agent and
+/// codex both point to `~/.agents/skills/` and are scanned in different
+/// orders). Once a skill is flagged as central it must never be downgraded to
+/// non-central by a subsequent scan of the same directory by a non-central agent.
 pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
     sqlx::query(
-        "INSERT OR REPLACE INTO skills
+        "INSERT INTO skills
          (id, name, description, file_path, canonical_path, is_central, source, content, scanned_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name           = excluded.name,
+           description    = excluded.description,
+           file_path      = excluded.file_path,
+           canonical_path = COALESCE(excluded.canonical_path, skills.canonical_path),
+           is_central     = MAX(skills.is_central, excluded.is_central),
+           source         = excluded.source,
+           content        = excluded.content,
+           scanned_at     = excluded.scanned_at",
     )
     .bind(&skill.id)
     .bind(&skill.name)
@@ -378,6 +393,51 @@ pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
 pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Skill>, String> {
     sqlx::query_as::<_, Skill>(
         "SELECT s.* FROM skills s
+         JOIN skill_installations si ON s.id = si.skill_id
+         WHERE si.agent_id = ?",
+    )
+    .bind(agent_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// A skill enriched with the installation-specific fields for a given agent.
+///
+/// Returned by `get_skills_for_agent`. The extra fields come from the
+/// `skill_installations` row and allow the frontend `SkillCard` to display
+/// the correct source indicator without a second round-trip.
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillForAgent {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    /// Absolute path to the `SKILL.md` file.
+    pub file_path: String,
+    /// Absolute path to the skill directory as installed for this agent
+    /// (i.e., `skill_installations.installed_path`).
+    pub dir_path: String,
+    /// How the skill is linked: "symlink", "copy", or "native".
+    pub link_type: String,
+    /// Symlink target path, if `link_type` is "symlink".
+    pub symlink_target: Option<String>,
+    pub is_central: bool,
+}
+
+/// Retrieve skills installed for a given agent, enriched with installation
+/// metadata (`dir_path`, `link_type`, `symlink_target`) required by the
+/// platform-view skill cards.
+pub async fn get_skills_for_agent(
+    pool: &DbPool,
+    agent_id: &str,
+) -> Result<Vec<SkillForAgent>, String> {
+    sqlx::query_as::<_, SkillForAgent>(
+        "SELECT s.id, s.name, s.description, s.file_path,
+                si.installed_path AS dir_path,
+                si.link_type,
+                si.symlink_target,
+                s.is_central
+         FROM skills s
          JOIN skill_installations si ON s.id = si.skill_id
          WHERE si.agent_id = ?",
     )
