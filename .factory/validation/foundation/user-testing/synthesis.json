@@ -1,0 +1,31 @@
+{
+  "milestone": "foundation",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 3,
+    "passed": 3,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-SCAN-001",
+    "VAL-SCAN-002",
+    "VAL-SCAN-005"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Documented alternate-port Tauri startup using a merged config override when port 1420 is occupied by another local dev server.",
+      "source": "setup"
+    },
+    {
+      "target": "user-testing.md",
+      "description": "Documented that regular browser access to the dev URL lacks Tauri globals and that native macOS window capture is the reliable evidence path for Tauri-backed state.",
+      "source": "flow-report"
+    }
+  ],
+  "previousRound": null
+}

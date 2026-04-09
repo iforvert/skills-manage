@@ -1,0 +1,104 @@
+{
+  "groupId": "sidebar-foundation",
+  "testedAt": "2026-04-09T11:35:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:1422",
+    "home": "/tmp/skills-manage-test-fixtures/foundation-home",
+    "startupLog": "evidence/foundation/sidebar-foundation/tauri-startup-log-tail.txt",
+    "evidenceDir": "evidence/foundation/sidebar-foundation",
+    "expectedCounts": {
+      "Central Skills": 1,
+      "Codex CLI": 1,
+      "Claude Code": 1,
+      "Gemini CLI": 0
+    }
+  },
+  "toolsUsed": [
+    "agent-browser",
+    "Execute",
+    "Read",
+    "macOS Quartz window capture"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-SCAN-001",
+      "title": "Startup scan populates sidebar",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Launch the Tauri dev app against the isolated fixture HOME on port 1422 and wait for the native window to finish startup",
+          "expected": "The app automatically scans configured platform directories and populates the sidebar with detected platforms plus count badges",
+          "observed": "The native `skills-manage` window rendered a populated sidebar with platform rows and count badges, including Claude Code `1`, Codex CLI `1`, and multiple zero-count platforms."
+        },
+        {
+          "action": "Capture the native app window after startup",
+          "expected": "A screenshot shows the sidebar populated from real scan data rather than an empty loading state",
+          "observed": "`skills-manage-window-cropped.png` shows the full sidebar populated after startup scan completed."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/sidebar-foundation/skills-manage-window-cropped.png"
+        ],
+        "consoleErrors": "No browser page errors were reported in the fallback localhost preview; final assertion evidence came from the native Tauri window because the plain browser preview lacked Tauri globals.",
+        "network": "Startup log shows Vite ready on http://localhost:1422 and the native Tauri binary running.",
+        "log": "foundation/sidebar-foundation/tauri-startup-log-tail.txt"
+      },
+      "issues": ""
+    },
+    {
+      "id": "VAL-SCAN-002",
+      "title": "Central Skills count in sidebar",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect the Central Skills entry in the populated native sidebar",
+          "expected": "The sidebar shows `Central Skills` with badge count `1` for the single canonical skill in the isolated fixture home",
+          "observed": "The native screenshot shows the highlighted `Central Skills` row with badge `1`, matching the isolated fixture and SQLite scan results."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/sidebar-foundation/skills-manage-window-cropped.png"
+        ],
+        "consoleErrors": "n/a for native-window evidence",
+        "network": "n/a",
+        "log": "foundation/sidebar-foundation/tauri-startup-log-tail.txt"
+      },
+      "issues": ""
+    },
+    {
+      "id": "VAL-SCAN-005",
+      "title": "Scanner handles missing directories",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run startup scan with the isolated fixture home where `~/.gemini/skills/` is intentionally absent",
+          "expected": "The app remains stable and Gemini CLI displays `0` skills instead of crashing",
+          "observed": "The native sidebar remained fully rendered and shows `Gemini CLI` with badge `0`, confirming the missing directory path is handled without crashing the app."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/sidebar-foundation/skills-manage-window-cropped.png"
+        ],
+        "consoleErrors": "n/a for native-window evidence",
+        "network": "n/a",
+        "log": "foundation/sidebar-foundation/tauri-startup-log-tail.txt"
+      },
+      "issues": ""
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Port 1420 was already occupied by another local Vite server (`hermes-gui`), so the Tauri app had to be started with a merged config override on port 1422.",
+      "resolution": "Started `pnpm tauri dev -c '{\"build\":{\"beforeDevCommand\":\"pnpm exec vite --port 1422\",\"devUrl\":\"http://localhost:1422\"}}' --no-watch` and documented the override in `.factory/library/user-testing.md`."
+    },
+    {
+      "description": "Opening the localhost preview in a regular browser did not expose Tauri globals (`window.__TAURI__` and `window.__TAURI_INTERNALS__` were both `undefined`), so browser-only evidence showed empty counts.",
+      "resolution": "Validated the real user surface via a native `skills-manage` window capture on macOS and recorded the constraint in `.factory/library/user-testing.md`."
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 3 assigned assertions: 3 passed, 0 failed, 0 blocked. Startup scan populated the native sidebar, Central Skills showed count 1, and Gemini CLI safely showed 0 for the intentionally missing directory."
+}
