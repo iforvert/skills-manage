@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { usePlatformStore } from "@/stores/platformStore";
+import { CollectionPickerDialog } from "@/components/collection/CollectionPickerDialog";
 import { AgentWithStatus, SkillInstallation } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -199,6 +200,7 @@ export function SkillDetail() {
 
   // Local UI state
   const [activeTab, setActiveTab] = useState<PreviewTab>("markdown");
+  const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);
 
   // Load detail on mount / skillId change, reset on unmount
   useEffect(() => {
@@ -234,6 +236,13 @@ export function SkillDetail() {
     await uninstallSkill(skillId, agentId);
     // Refresh sidebar counts in background
     rescan();
+  }
+
+  function handleCollectionAdded() {
+    // Reload the skill detail to reflect updated collection membership.
+    if (skillId) {
+      loadDetail(skillId);
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -349,6 +358,7 @@ export function SkillDetail() {
                   size="sm"
                   className="gap-1.5 text-muted-foreground hover:text-foreground"
                   aria-label="Add to collection"
+                  onClick={() => setIsCollectionPickerOpen(true)}
                 >
                   <Plus className="size-3.5" />
                   Add to collection
@@ -392,6 +402,17 @@ export function SkillDetail() {
           </div>
         )}
       </div>
+
+      {/* Collection Picker Dialog */}
+      {skillId && (
+        <CollectionPickerDialog
+          open={isCollectionPickerOpen}
+          onOpenChange={setIsCollectionPickerOpen}
+          skillId={skillId}
+          currentCollectionIds={detail?.collections ?? []}
+          onAdded={handleCollectionAdded}
+        />
+      )}
     </div>
   );
 }

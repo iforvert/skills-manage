@@ -14,6 +14,30 @@ vi.mock("../stores/platformStore", () => ({
   usePlatformStore: vi.fn(),
 }));
 
+// ─── Mock CollectionPickerDialog ──────────────────────────────────────────────
+
+vi.mock("../components/collection/CollectionPickerDialog", () => ({
+  CollectionPickerDialog: ({
+    open,
+    onOpenChange,
+    onAdded,
+  }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    skillId: string;
+    currentCollectionIds: string[];
+    onAdded: () => void;
+  }) =>
+    open ? (
+      <div data-testid="collection-picker-dialog">
+        <button onClick={() => { onAdded(); onOpenChange(false); }}>
+          Confirm add to collection
+        </button>
+        <button onClick={() => onOpenChange(false)}>Cancel picker</button>
+      </div>
+    ) : null,
+}));
+
 import { useSkillDetailStore } from "../stores/skillDetailStore";
 import { usePlatformStore } from "../stores/platformStore";
 
@@ -434,5 +458,50 @@ describe("SkillDetail", () => {
     );
     // The Install button for Cursor should be replaced by a spinner
     expect(screen.queryByRole("button", { name: /Install to Cursor/i })).toBeNull();
+  });
+
+  // ── CollectionPickerDialog integration ────────────────────────────────────
+
+  it("does not render CollectionPickerDialog by default", () => {
+    renderSkillDetail();
+    expect(screen.queryByTestId("collection-picker-dialog")).toBeNull();
+  });
+
+  it("opens CollectionPickerDialog when Add to collection is clicked", async () => {
+    renderSkillDetail();
+    const addBtn = screen.getByRole("button", { name: /Add to collection/i });
+    fireEvent.click(addBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId("collection-picker-dialog")).toBeInTheDocument();
+    });
+  });
+
+  it("closes CollectionPickerDialog when cancel is clicked inside it", async () => {
+    renderSkillDetail();
+    fireEvent.click(screen.getByRole("button", { name: /Add to collection/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("collection-picker-dialog")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Cancel picker/i }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("collection-picker-dialog")).toBeNull();
+    });
+  });
+
+  it("calls loadDetail to refresh skill after collections are added", async () => {
+    renderSkillDetail();
+    mockLoadDetail.mockClear(); // clear the initial load call
+
+    fireEvent.click(screen.getByRole("button", { name: /Add to collection/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("collection-picker-dialog")).toBeInTheDocument();
+    });
+
+    // Simulate confirming the picker (which calls onAdded then closes)
+    fireEvent.click(screen.getByRole("button", { name: /Confirm add to collection/i }));
+
+    await waitFor(() => {
+      expect(mockLoadDetail).toHaveBeenCalledWith("frontend-design");
+    });
   });
 });
