@@ -5,6 +5,7 @@ import { usePlatformStore } from "@/stores/platformStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { Input } from "@/components/ui/input";
 import { SkillCard } from "@/components/platform/SkillCard";
+import { PlatformIcon } from "@/components/platform/PlatformIcon";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
@@ -70,7 +71,10 @@ export function PlatformView() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="border-b border-border px-6 py-4">
-        <h1 className="text-xl font-semibold">{agent.display_name}</h1>
+        <div className="flex items-center gap-2.5">
+          <PlatformIcon agentId={agent.id} className="size-6 text-primary/70" size={24} />
+          <h1 className="text-xl font-semibold">{agent.display_name}</h1>
+        </div>
         <p className="text-sm text-muted-foreground mt-0.5">
           {agent.global_skills_dir}
         </p>
@@ -102,7 +106,7 @@ export function PlatformView() {
             message={`No skills match "${searchQuery}"`}
           />
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {filteredSkills.map((skill) => (
               <SkillCard key={skill.id} skill={skill} />
             ))}

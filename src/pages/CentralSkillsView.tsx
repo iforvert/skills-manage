@@ -170,7 +170,7 @@ export function CentralSkillsView() {
         ) : filteredSkills.length === 0 ? (
           <EmptyState message={`No skills match "${searchQuery}"`} />
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {filteredSkills.map((skill) => (
               <CentralSkillCard
                 key={skill.id}

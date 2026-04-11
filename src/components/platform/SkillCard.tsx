@@ -45,17 +45,17 @@ export function SkillCard({ skill, className }: SkillCardProps) {
     <button
       role="button"
       onClick={() => navigate(`/skill/${skill.id}`)}
-      className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
+      className="w-full h-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
       aria-label={`View skill ${skill.name}`}
     >
       <Card
         size="sm"
         className={cn(
-          "transition-all hover:ring-primary/25 hover:bg-accent/30 cursor-pointer",
+          "h-full flex flex-col transition-all hover:ring-primary/25 hover:bg-accent/30 cursor-pointer",
           className
         )}
       >
-        <CardContent className="flex items-start justify-between gap-3">
+        <CardContent className="flex flex-1 items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-1">
             {/* Skill name */}
             <div className="font-medium text-sm text-foreground truncate">

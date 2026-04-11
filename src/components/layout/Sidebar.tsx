@@ -5,12 +5,12 @@ import {
   Plus,
   Loader2,
   Upload,
-  Monitor,
   PackageOpen,
   Folder,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { CollectionEditor } from "@/components/collection/CollectionEditor";
@@ -262,7 +262,7 @@ export function Sidebar() {
                   badge={!collapsed ? (skillsByAgent[agent.id] ?? 0) : undefined}
                   isActive={pathname === `/platform/${agent.id}`}
                   onClick={() => navigate(`/platform/${agent.id}`)}
-                  icon={<Monitor className="size-4" />}
+                  icon={<PlatformIcon agentId={agent.id} className="size-4" />}
                   collapsed={collapsed}
                 />
               ))}

@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AgentWithStatus, SkillWithLinks } from "@/types";
 import { cn } from "@/lib/utils";
+import { PlatformIcon } from "@/components/platform/PlatformIcon";
 
 // ─── Platform Link Badge ──────────────────────────────────────────────────────
 
@@ -21,6 +22,7 @@ function PlatformBadge({ agent, isLinked }: PlatformBadgeProps) {
       )}
       title={`${agent.display_name}: ${isLinked ? "linked" : "not linked"}`}
     >
+      <PlatformIcon agentId={agent.id} className="size-3 shrink-0" size={12} />
       {isLinked ? (
         <Check className="size-3 shrink-0" aria-label="linked" />
       ) : (
@@ -52,8 +54,8 @@ export function CentralSkillCard({
   const targetAgents = agents.filter((a) => a.id !== "central");
 
   return (
-    <Card size="sm" className={cn("", className)}>
-      <CardContent className="space-y-3">
+    <Card size="sm" className={cn("flex flex-col", className)}>
+      <CardContent className="flex flex-col flex-1 space-y-3">
         {/* Header row: name + action buttons */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-0.5">
@@ -98,9 +100,9 @@ export function CentralSkillCard({
           </div>
         </div>
 
-        {/* Per-platform link status */}
+        {/* Per-platform link status — pushed to bottom so cards align in grid */}
         {targetAgents.length > 0 && (
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-auto">
             {targetAgents.map((agent) => (
               <PlatformBadge
                 key={agent.id}
