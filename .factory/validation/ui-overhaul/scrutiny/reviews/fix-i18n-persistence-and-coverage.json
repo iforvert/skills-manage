@@ -1,0 +1,28 @@
+{
+  "featureId": "fix-i18n-persistence-and-coverage",
+  "reviewedAt": "2026-04-12T13:38:59Z",
+  "commitId": "f1dcaa4",
+  "transcriptSkeletonReviewed": false,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The follow-up commit correctly removes the hardcoded `lng: \"zh\"` path and fixes the previously flagged toasts, confirms, and aria labels in the reviewed pages, but the promised translation audit is still incomplete because several user-facing accessibility labels remain hardcoded in English outside the locale files.",
+    "issues": [
+      {
+        "file": "src/components/central/InstallDialog.tsx",
+        "line": 121,
+        "severity": "blocking",
+        "description": "The feature claims to move all remaining user-facing strings behind `t()`, but multiple accessibility labels are still hardcoded in English: `aria-label=\"Select platforms\"` in `src/components/central/InstallDialog.tsx:121` and `src/components/collection/CollectionInstallDialog.tsx:108`, `aria-label=\"Select skills\"` in `src/components/collection/SkillPickerDialog.tsx:137`, `aria-label=\"Select collections\"` in `src/components/collection/CollectionPickerDialog.tsx:108`, and `<span className=\"sr-only\">Close</span>` in `src/components/ui/dialog.tsx:127`. Chinese mode will still expose English screen-reader copy, so the translation-coverage blocker from `ui-i18n-setup` is not fully resolved."
+      },
+      {
+        "file": "src/i18n/locales/zh.json",
+        "line": 186,
+        "severity": "non_blocking",
+        "description": "The glossary normalization is still incomplete. `settings.scanDirsDesc` and `settings.customPlatformsDesc` keep the English noun `skills` (`src/i18n/locales/zh.json:186` and `:197`) instead of using the agreed Chinese terminology, so the locale is still slightly inconsistent."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "ui-i18n-setup",
+  "summary": "Fail. The persistence bug is fixed, but the re-review still finds untranslated accessibility labels and dialog-close copy outside the locale resources, so the complete i18n-coverage requirement remains unmet."
+}

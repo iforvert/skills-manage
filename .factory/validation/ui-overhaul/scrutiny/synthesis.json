@@ -1,11 +1,11 @@
 {
   "milestone": "ui-overhaul",
-  "round": 1,
+  "round": 2,
   "status": "fail",
   "validatorsRun": {
     "test": {
       "passed": true,
-      "command": "pnpm --dir \"/Users/happypeet/Documents/GitHubMe/skills-manage\" test",
+      "command": "bun run --cwd \"/Users/happypeet/Documents/GitHubMe/skills-manage\" test",
       "exitCode": 0
     },
     "testRust": {
@@ -15,12 +15,12 @@
     },
     "typecheck": {
       "passed": true,
-      "command": "pnpm --dir \"/Users/happypeet/Documents/GitHubMe/skills-manage\" typecheck",
+      "command": "bun run --cwd \"/Users/happypeet/Documents/GitHubMe/skills-manage\" typecheck",
       "exitCode": 0
     },
     "lint": {
       "passed": true,
-      "command": "pnpm --dir \"/Users/happypeet/Documents/GitHubMe/skills-manage\" lint",
+      "command": "bun run --cwd \"/Users/happypeet/Documents/GitHubMe/skills-manage\" lint",
       "exitCode": 0
     },
     "clippy": {
@@ -30,34 +30,29 @@
     }
   },
   "reviewsSummary": {
-    "total": 3,
-    "passed": 2,
+    "total": 1,
+    "passed": 0,
     "failed": 1,
     "failedFeatures": [
-      "ui-i18n-setup"
+      "fix-i18n-persistence-and-coverage"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "ui-i18n-setup",
+      "featureId": "fix-i18n-persistence-and-coverage",
       "severity": "blocking",
-      "description": "The new i18n bootstrap hardcodes `lng: \"zh\"` in `src/i18n/index.ts`, which bypasses `i18next-browser-languagedetector` during init. That means the saved language in `skills-manage-language` is ignored on reload, so the Settings language switcher does not actually persist the user's choice across sessions."
-    },
-    {
-      "featureId": "ui-i18n-setup",
-      "severity": "blocking",
-      "description": "The translation sweep is incomplete: runtime copy is still hard-coded in `CollectionView`, `CentralSkillsView`, `SkillDetail`, `CentralSkillCard`, and `Sidebar`. English mode still surfaces Chinese install/uninstall toasts, while Chinese mode still leaks English delete/refresh/install failure copy and accessibility text, so the milestone has not fully translated all user-facing strings."
+      "description": "The follow-up i18n audit is still incomplete. Hardcoded English accessibility labels remain in `InstallDialog`, `CollectionInstallDialog`, `SkillPickerDialog`, `CollectionPickerDialog`, and the shared dialog close button, so Chinese mode still leaks untranslated screen-reader text outside the locale resources."
     }
   ],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "skills",
-      "suggestion": "Update the scrutiny validator/reviewer procedure so Task-spawned `scrutiny-feature-reviewer` subagents can run with automatic execution approval in this worker environment, or document the manual-review fallback explicitly.",
-      "evidence": "In this ui-overhaul scrutiny run, all three Task invocations for `ui-green-theme-and-visual-polish`, `ui-platform-icons-and-grid-layout`, and `ui-i18n-setup` exited immediately with `Exec ended early: insufficient permission to proceed`, so the validator had to inspect the handoffs, transcript skeletons, and commit diffs manually instead of using reviewer subagents.",
+      "suggestion": "Update the scrutiny review/validator procedure so Task-spawned `scrutiny-feature-reviewer` subagents can run with automatic execution approval in this worker environment, or provide a documented manual-review fallback.",
+      "evidence": "In this ui-overhaul re-run, the Task invocation for `fix-i18n-persistence-and-coverage` again exited with `Exec ended early: insufficient permission to proceed`, so the validator had to review the fix manually from the commit diff and current source state instead of using the required reviewer subagent.",
       "isSystemic": true
     }
   ],
   "rejectedObservations": [],
-  "previousRound": null
+  "previousRound": ".factory/validation/ui-overhaul/scrutiny/synthesis.round1.json"
 }
