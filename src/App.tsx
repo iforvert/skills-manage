@@ -5,6 +5,7 @@ import { CentralSkillsView } from "@/pages/CentralSkillsView";
 import { SkillDetail } from "@/pages/SkillDetail";
 import { CollectionView } from "@/pages/CollectionView";
 import { SettingsView } from "@/pages/SettingsView";
+import { DiscoverView } from "@/pages/DiscoverView";
 
 function App() {
   return (
@@ -20,6 +21,10 @@ function App() {
         <Route path="skill/:skillId" element={<SkillDetail />} />
         {/* Collection view */}
         <Route path="collection/:collectionId" element={<CollectionView />} />
+        {/* Discover project skills */}
+        <Route path="discover" element={<DiscoverView />} />
+        {/* Discover filtered by project */}
+        <Route path="discover/:projectPath" element={<DiscoverView />} />
         {/* Settings */}
         <Route path="settings" element={<SettingsView />} />
       </Route>

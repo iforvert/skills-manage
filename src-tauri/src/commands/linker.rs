@@ -71,13 +71,13 @@ pub fn make_relative_path(from_dir: &Path, to_path: &Path) -> PathBuf {
 // ─── Platform-specific symlink creation ──────────────────────────────────────
 
 #[cfg(unix)]
-fn create_symlink(target: &Path, link: &Path) -> Result<(), String> {
+pub fn create_symlink(target: &Path, link: &Path) -> Result<(), String> {
     std::os::unix::fs::symlink(target, link)
         .map_err(|e| format!("Failed to create symlink: {}", e))
 }
 
 #[cfg(not(unix))]
-fn create_symlink(_target: &Path, _link: &Path) -> Result<(), String> {
+pub fn create_symlink(_target: &Path, _link: &Path) -> Result<(), String> {
     Err("Symlink creation is only supported on Unix systems".to_string())
 }
 
@@ -87,7 +87,7 @@ fn create_symlink(_target: &Path, _link: &Path) -> Result<(), String> {
 ///
 /// `dst` must not exist prior to the call (or may be an empty dir).
 /// The behaviour mirrors `cp -r src dst` on Unix.
-fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
+pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     std::fs::create_dir_all(dst)
         .map_err(|e| format!("Failed to create destination directory '{}': {}", dst.display(), e))?;
 

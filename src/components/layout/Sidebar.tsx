@@ -14,6 +14,8 @@ import { useTranslation } from "react-i18next";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCollectionStore } from "@/stores/collectionStore";
+// Discover store available for future use
+// import { useDiscoverStore } from "@/stores/discoverStore";
 import { CollectionEditor } from "@/components/collection/CollectionEditor";
 import { cn } from "@/lib/utils";
 

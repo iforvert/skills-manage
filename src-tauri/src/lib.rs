@@ -82,6 +82,14 @@ pub fn run() {
             commands::settings::set_scan_directory_active,
             commands::settings::get_setting,
             commands::settings::set_setting,
+            // Discover
+            commands::discover::discover_scan_roots,
+            commands::discover::start_project_scan,
+            commands::discover::stop_project_scan,
+            commands::discover::get_discovered_skills,
+            commands::discover::import_discovered_skill_to_central,
+            commands::discover::import_discovered_skill_to_platform,
+            commands::discover::clear_discovered_skills,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

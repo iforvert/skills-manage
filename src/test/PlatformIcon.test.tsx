@@ -2,10 +2,48 @@ import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
 import { PlatformIcon } from "../components/platform/PlatformIcon";
 
+// ─── All known platform agent IDs ─────────────────────────────────────────────
+
+const ORIGINAL_PLATFORM_IDS = [
+  "claude-code",
+  "codex",
+  "cursor",
+  "gemini-cli",
+  "trae",
+  "factory-droid",
+  "openclaw",
+  "qclaw",
+  "easyclaw",
+  "workbuddy",
+  "central",
+];
+
+const NEW_PLATFORM_IDS = [
+  "junie",
+  "qwen",
+  "trae-cn",
+  "windsurf",
+  "qoder",
+  "augment",
+  "opencode",
+  "kilocode",
+  "ob1",
+  "amp",
+  "kiro",
+  "codebuddy",
+  "hermes",
+  "autoclaw",
+  "copilot",
+  "aider",
+  "easyclaw-v2",
+];
+
+const ALL_PLATFORM_IDS = [...ORIGINAL_PLATFORM_IDS, ...NEW_PLATFORM_IDS];
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("PlatformIcon", () => {
-  // ── Rendering ─────────────────────────────────────────────────────────────
+  // ── Rendering — original platforms ────────────────────────────────────────
 
   it("renders an SVG element for claude-code", () => {
     const { container } = render(<PlatformIcon agentId="claude-code" />);
@@ -60,6 +98,110 @@ describe("PlatformIcon", () => {
   it("renders an SVG element for central", () => {
     const { container } = render(<PlatformIcon agentId="central" />);
     expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  // ── Rendering — new platform icons ────────────────────────────────────────
+
+  it("renders an SVG element for junie", () => {
+    const { container } = render(<PlatformIcon agentId="junie" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for qwen", () => {
+    const { container } = render(<PlatformIcon agentId="qwen" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for trae-cn", () => {
+    const { container } = render(<PlatformIcon agentId="trae-cn" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for windsurf", () => {
+    const { container } = render(<PlatformIcon agentId="windsurf" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for qoder", () => {
+    const { container } = render(<PlatformIcon agentId="qoder" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for augment", () => {
+    const { container } = render(<PlatformIcon agentId="augment" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for opencode", () => {
+    const { container } = render(<PlatformIcon agentId="opencode" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for kilocode", () => {
+    const { container } = render(<PlatformIcon agentId="kilocode" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for ob1", () => {
+    const { container } = render(<PlatformIcon agentId="ob1" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for amp", () => {
+    const { container } = render(<PlatformIcon agentId="amp" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for kiro", () => {
+    const { container } = render(<PlatformIcon agentId="kiro" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for codebuddy", () => {
+    const { container } = render(<PlatformIcon agentId="codebuddy" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for hermes", () => {
+    const { container } = render(<PlatformIcon agentId="hermes" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for autoclaw", () => {
+    const { container } = render(<PlatformIcon agentId="autoclaw" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for copilot", () => {
+    const { container } = render(<PlatformIcon agentId="copilot" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for aider", () => {
+    const { container } = render(<PlatformIcon agentId="aider" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for easyclaw-v2", () => {
+    const { container } = render(<PlatformIcon agentId="easyclaw-v2" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  // ── Uniqueness — each platform renders a distinct SVG ─────────────────────
+
+  it("renders unique SVG content for each platform (no two are identical)", () => {
+    const svgContents = new Map<string, string>();
+
+    for (const id of ALL_PLATFORM_IDS) {
+      const { container } = render(<PlatformIcon agentId={id} />);
+      const svg = container.querySelector("svg");
+      expect(svg).toBeInTheDocument();
+      const inner = svg?.innerHTML ?? "";
+      // easyclaw and easyclaw-v2 intentionally share the same SVG
+      if (id === "easyclaw-v2") continue;
+      expect(svgContents.has(inner), `Duplicate SVG for ${id}`).toBe(false);
+      svgContents.set(inner, id);
+    }
   });
 
   // ── Fallback ──────────────────────────────────────────────────────────────
