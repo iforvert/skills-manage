@@ -1,0 +1,81 @@
+{
+  "milestone": "catppuccin-alignment",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "notes": "The catppuccin-alignment milestone's only implementation feature (catppuccin-exact-colors-and-accent-picker) has an empty fulfills field — no formal validation contract assertions are mapped to this milestone. All 69 existing assertions in validation-state.json are already passed from prior milestones. User testing was performed to verify the visual correctness of the Catppuccin theme alignment changes through the real user surface.",
+  "verificationPerformed": {
+    "automatedTests": {
+      "frontend": "402 tests passed (pnpm test)",
+      "rust": "214 tests passed (cargo test)",
+      "typecheck": "passed (pnpm typecheck)",
+      "lint": "passed (pnpm lint)"
+    },
+    "browserVerification": {
+      "tool": "agent-browser",
+      "surface": "http://localhost:24200",
+      "checks": [
+        {
+          "check": "Mocha flavor exact hex values",
+          "result": "pass",
+          "detail": "base=#1e1e2e, text=#cdd6f4, green=#a6e3a1, lavender=#b4befe, blue=#89b4fa, red=#f38ba8, mauve=#cba6f7 — all match official Catppuccin palette"
+        },
+        {
+          "check": "Latte flavor exact hex values",
+          "result": "pass",
+          "detail": "base=#eff1f5, text=#4c4f69, green=#40a02b, lavender=#7287fd, blue=#1e66f5, red=#d20f39, mauve=#8839ef — all match official Catppuccin palette"
+        },
+        {
+          "check": "Macchiato flavor exact hex values",
+          "result": "pass",
+          "detail": "base=#24273a, text=#cad3f5, green=#a6da95, lavender=#b7bdf8, blue=#8aadf4, red=#ed8796, mauve=#c6a0f6 — all match official Catppuccin palette"
+        },
+        {
+          "check": "Frappé flavor exact hex values",
+          "result": "pass",
+          "detail": "base=#303446, text=#c6d0f5, green=#a6d189, lavender=#babbf1, blue=#8caaee, red=#e78284, mauve=#ca9ee6 — all match official Catppuccin palette"
+        },
+        {
+          "check": "Semantic token mapping per flavor",
+          "result": "pass",
+          "detail": "All semantic tokens (background→base, foreground→text, card→mantle, primary→accent, secondary→surface0, muted→surface1, border→surface0/s1, sidebar→mantle) correctly mapped across all 4 flavors"
+        },
+        {
+          "check": "Accent color switching",
+          "result": "pass",
+          "detail": "Switching accent via data-accent attribute correctly updates --primary, --ring, --sidebar-primary to the corresponding Catppuccin named color. Verified Green (#a6e3a1 on Mocha) and Mauve (#ca9ee6 on Frappé)"
+        },
+        {
+          "check": "All 14 accent colors on Mocha",
+          "result": "pass",
+          "detail": "rosewater=#f5e0dc, flamingo=#f2cdcd, pink=#f5c2e7, mauve=#cba6f7, red=#f38ba8, maroon=#eba0ac, peach=#fab387, yellow=#f9e2af, green=#a6e3a1, teal=#94e2d5, sky=#89dceb, sapphire=#74c7ec, blue=#89b4fa, lavender=#b4befe — all 14 match official palette"
+        },
+        {
+          "check": "Accent picker UI in Settings",
+          "result": "pass",
+          "detail": "Settings page shows Accent Color radiogroup with all 14 options (Rosewater through Lavender), Lavender checked by default"
+        },
+        {
+          "check": "Flavor switcher UI in Settings",
+          "result": "pass",
+          "detail": "Settings page shows 4 flavor buttons: Mocha, Macchiato, Frappé, Latte with correct pressed state"
+        },
+        {
+          "check": "Flavor and accent persistence across reload",
+          "result": "pass",
+          "detail": "After switching to Mocha flavor and Green accent, reloading the page preserves both (localStorage catppuccin-flavor=mocha, catppuccin-accent=green)"
+        }
+      ]
+    }
+  },
+  "appliedUpdates": [],
+  "previousRound": null
+}
