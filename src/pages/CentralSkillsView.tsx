@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, RefreshCw, Blocks, FolderOpen, Settings } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -10,6 +10,7 @@ import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { consumeScrollPosition, createScrollRestorationState } from "@/lib/scrollRestoration";
 import { SkillWithLinks } from "@/types";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ function FirstVisitEmptyState() {
 
 export function CentralSkillsView() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const skills = useCentralSkillsStore((state) => state.skills);
   const agents = useCentralSkillsStore((state) => state.agents);
@@ -84,6 +86,12 @@ export function CentralSkillsView() {
   const [installTargetSkill, setInstallTargetSkill] =
     useState<SkillWithLinks | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const restorationState = location.state?.scrollRestoration;
+  const restorationKey =
+    restorationState && restorationState.key === "central"
+      ? restorationState.key
+      : null;
 
   // Load central skills on mount.
   useEffect(() => {
@@ -100,6 +108,20 @@ export function CentralSkillsView() {
         skill.description?.toLowerCase().includes(q)
     );
   }, [skills, searchQuery]);
+
+  useEffect(() => {
+    if (!restorationKey || isLoading || skills.length === 0 || !contentRef.current) {
+      return;
+    }
+
+    const scrollTop = consumeScrollPosition(restorationKey);
+    if (scrollTop === null) {
+      return;
+    }
+
+    contentRef.current.scrollTop = scrollTop;
+    navigate(location.pathname, { replace: true, state: null });
+  }, [restorationKey, isLoading, skills.length, navigate, location.pathname]);
 
   function handleInstallClick(skill: SkillWithLinks) {
     setInstallTargetSkill(skill);
@@ -176,7 +198,7 @@ export function CentralSkillsView() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div ref={contentRef} className="flex-1 overflow-auto p-6">
         {isLoading ? (
           <EmptyState message={t("central.loading")} />
         ) : skills.length === 0 ? (
@@ -190,7 +212,19 @@ export function CentralSkillsView() {
                 key={skill.id}
                 name={skill.name}
                 description={skill.description}
-                onDetail={() => navigate(`/skill/${skill.id}`)}
+                onDetail={() => {
+                  if (contentRef.current) {
+                    contentRef.current.dataset.scrollRestoration = "central";
+                  }
+                  navigate(`/skill/${skill.id}`, {
+                    state: {
+                      scrollRestoration: createScrollRestorationState(
+                        "central",
+                        contentRef.current?.scrollTop ?? 0
+                      ),
+                    },
+                  });
+                }}
                 onInstallTo={() => handleInstallClick(skill)}
                 platformIcons={{
                   agents,

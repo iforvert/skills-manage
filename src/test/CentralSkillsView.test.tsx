@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { CentralSkillsView } from "../pages/CentralSkillsView";
 import { AgentWithStatus, SkillWithLinks } from "../types";
+import { consumeScrollPosition } from "../lib/scrollRestoration";
 
 // Mock stores
 vi.mock("../stores/centralSkillsStore", () => ({
@@ -129,6 +130,10 @@ describe("CentralSkillsView", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    consumeScrollPosition("central");
+  });
+
   // ── Header ────────────────────────────────────────────────────────────────
 
   it("shows page title in header", () => {
@@ -178,19 +183,12 @@ describe("CentralSkillsView", () => {
     expect(installButtons).toHaveLength(2);
   });
 
-  it("shows detail button for each skill", () => {
-    renderCentralSkillsView();
-    const detailButtons = screen.getAllByText("[详情]");
-    expect(detailButtons).toHaveLength(2);
-  });
-
   it("skill name is a clickable button for detail navigation", () => {
     renderCentralSkillsView();
-    // Both the skill name and the [详情] button have aria-label "查看 ... 的详情"
+    // The skill name itself is the detail link (no separate [详情] button).
     const detailBtns = screen.getAllByRole("button", {
       name: /查看 frontend-design 的详情/i,
     });
-    // Should find at least one (the skill name button)
     expect(detailBtns.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -327,6 +325,108 @@ describe("CentralSkillsView", () => {
     // Dialog should open (skill name should appear in dialog title)
     await waitFor(() => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+  });
+
+  it("passes central scroll restoration state when opening detail", async () => {
+    render(
+      <MemoryRouter initialEntries={["/central"]}>
+        <Routes>
+          <Route path="/central" element={<CentralSkillsView />} />
+          <Route path="/skill/:skillId" element={<div>detail-route</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const scroller = screen.getByText("frontend-design").closest("[class*='overflow-auto']");
+    expect(scroller).not.toBeNull();
+    if (!scroller) return;
+
+    Object.defineProperty(scroller, "scrollTop", {
+      value: 240,
+      writable: true,
+      configurable: true,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /查看 frontend-design 的详情/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("detail-route")).toBeInTheDocument();
+    });
+
+    const historyState = window.history.state?.usr;
+    expect(historyState.scrollRestoration).toEqual({
+      key: "central",
+      scrollTop: 240,
+    });
+  });
+
+  it("restores nested scroll position after data has hydrated", async () => {
+    let centralState = buildCentralStoreState({
+      skills: [],
+      isLoading: true,
+    });
+
+    vi.mocked(useCentralSkillsStore).mockImplementation((selector?: unknown) => {
+      if (typeof selector === "function") return selector(centralState);
+      return centralState;
+    });
+    vi.mocked(usePlatformStore).mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState();
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    const { rerender } = render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/central",
+            state: {
+              scrollRestoration: {
+                key: "central",
+                scrollTop: 360,
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/central" element={<CentralSkillsView />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("正在加载技能...")).toBeInTheDocument();
+    expect(consumeScrollPosition("central")).toBeNull();
+
+    centralState = buildCentralStoreState();
+    rerender(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/central",
+            state: {
+              scrollRestoration: {
+                key: "central",
+                scrollTop: 360,
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/central" element={<CentralSkillsView />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const scroller = screen.getByText("frontend-design").closest("[class*='overflow-auto']");
+    expect(scroller).not.toBeNull();
+    if (!scroller) return;
+
+    await waitFor(() => {
+      expect((scroller as HTMLDivElement).scrollTop).toBe(360);
     });
   });
 });

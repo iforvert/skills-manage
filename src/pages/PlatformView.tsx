@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Search, Blocks } from "lucide-react";
+import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useSkillStore } from "@/stores/skillStore";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { Input } from "@/components/ui/input";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
+import { InstallDialog } from "@/components/central/InstallDialog";
+import { consumeScrollPosition, createScrollRestorationState } from "@/lib/scrollRestoration";
+import { SkillWithLinks } from "@/types";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
@@ -26,6 +31,7 @@ function EmptyState({ message }: { message: string }) {
 export function PlatformView() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const agents = usePlatformStore((state) => state.agents);
 
@@ -33,7 +39,23 @@ export function PlatformView() {
   const loadingByAgent = useSkillStore((state) => state.loadingByAgent);
   const getSkillsByAgent = useSkillStore((state) => state.getSkillsByAgent);
 
+  const centralSkills = useCentralSkillsStore((state) => state.skills);
+  const centralAgents = useCentralSkillsStore((state) => state.agents);
+  const loadCentralSkills = useCentralSkillsStore((state) => state.loadCentralSkills);
+  const installSkill = useCentralSkillsStore((state) => state.installSkill);
+  const rescan = usePlatformStore((state) => state.rescan);
+
   const [searchQuery, setSearchQuery] = useState("");
+  const [installTargetSkill, setInstallTargetSkill] = useState<SkillWithLinks | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const restorationState = location.state?.scrollRestoration;
+  const restorationKey =
+    restorationState &&
+    agentId &&
+    restorationState.key === `platform:${agentId}`
+      ? restorationState.key
+      : null;
 
   // Load skills for this agent when agentId changes
   useEffect(() => {
@@ -41,6 +63,39 @@ export function PlatformView() {
       getSkillsByAgent(agentId);
     }
   }, [agentId, getSkillsByAgent]);
+
+  // Ensure central skills are loaded so we can resolve SkillWithLinks for InstallDialog.
+  useEffect(() => {
+    if (centralSkills.length === 0) {
+      loadCentralSkills();
+    }
+  }, [centralSkills.length, loadCentralSkills]);
+
+  function handleInstallClick(skillId: string) {
+    const target = centralSkills.find((s) => s.id === skillId);
+    if (!target) {
+      toast.error(t("central.installError", { error: t("platform.notFound") }));
+      return;
+    }
+    setInstallTargetSkill(target);
+    setIsDialogOpen(true);
+  }
+
+  async function handleInstall(skillId: string, agentIds: string[], method: string) {
+    try {
+      const result = await installSkill(skillId, agentIds, method);
+      await rescan();
+      if (agentId) {
+        await getSkillsByAgent(agentId);
+      }
+      if (result.failed.length > 0) {
+        const failedNames = result.failed.map((f) => f.agent_id).join(", ");
+        toast.error(t("central.installPartialFail", { platforms: failedNames }));
+      }
+    } catch (err) {
+      toast.error(t("central.installError", { error: String(err) }));
+    }
+  }
 
   const agent = agents.find((a) => a.id === agentId);
   const isLoading = agentId ? (loadingByAgent[agentId] ?? false) : false;
@@ -61,6 +116,20 @@ export function PlatformView() {
         skill.description?.toLowerCase().includes(q)
     );
   }, [skills, searchQuery]);
+
+  useEffect(() => {
+    if (!restorationKey || isLoading || skills.length === 0 || !contentRef.current) {
+      return;
+    }
+
+    const scrollTop = consumeScrollPosition(restorationKey);
+    if (scrollTop === null) {
+      return;
+    }
+
+    contentRef.current.scrollTop = scrollTop;
+    navigate(location.pathname, { replace: true, state: null });
+  }, [restorationKey, isLoading, skills.length, navigate, location.pathname]);
 
   if (!agent) {
     return (
@@ -97,7 +166,7 @@ export function PlatformView() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div ref={contentRef} className="flex-1 overflow-auto p-6">
         {isLoading ? (
           <EmptyState message={t("platform.loading")} />
         ) : skills.length === 0 ? (
@@ -116,12 +185,31 @@ export function PlatformView() {
                 name={skill.name}
                 description={skill.description}
                 sourceType={skill.link_type as "symlink" | "copy"}
-                onClick={() => navigate(`/skill/${skill.id}`)}
+                onDetail={() =>
+                  navigate(`/skill/${skill.id}`, {
+                    state: {
+                      scrollRestoration: createScrollRestorationState(
+                        `platform:${agentId}`,
+                        contentRef.current?.scrollTop ?? 0
+                      ),
+                    },
+                  })
+                }
+                onInstallTo={() => handleInstallClick(skill.id)}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Install Dialog */}
+      <InstallDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        skill={installTargetSkill}
+        agents={centralAgents}
+        onInstall={handleInstall}
+      />
     </div>
   );
 }

@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   ArrowLeft,
   Tag,
   Plus,
   FileText,
   Code,
+  Bot,
+  RefreshCw,
   Loader2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
@@ -18,6 +23,8 @@ import { usePlatformStore } from "@/stores/platformStore";
 import { CollectionPickerDialog } from "@/components/collection/CollectionPickerDialog";
 import { AgentWithStatus, SkillInstallation } from "@/types";
 import { cn } from "@/lib/utils";
+import { isTauriRuntime } from "@/lib/tauri";
+import { saveScrollPosition } from "@/lib/scrollRestoration";
 
 // ─── Section Label ─────────────────────────────────────────────────────────────
 
@@ -75,7 +82,7 @@ function PlatformToggleIcon({ agent, skillName, isInstalled, isLoading, onToggle
 
 // ─── Tab Toggle ───────────────────────────────────────────────────────────────
 
-type PreviewTab = "markdown" | "raw";
+type PreviewTab = "markdown" | "raw" | "explanation";
 
 interface TabToggleProps {
   activeTab: PreviewTab;
@@ -114,16 +121,52 @@ function TabToggle({ activeTab, onChange }: TabToggleProps) {
         <Code className="size-3.5" />
         {t("detail.rawSource")}
       </button>
+      <button
+        role="tab"
+        aria-selected={activeTab === "explanation"}
+        onClick={() => onChange("explanation")}
+        className={cn(
+          "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+          activeTab === "explanation"
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <Bot className="size-3.5" />
+        {t("detail.aiExplanation")}
+      </button>
     </div>
   );
 }
+
+function stripFrontmatter(markdown: string) {
+  const match = markdown.match(/^---\s*\n[\s\S]*?\n---\s*\n?([\s\S]*)$/);
+  return match ? match[1].trimStart() : markdown;
+}
+
+const detailTypographyClassName = cn(
+  "text-[13px] leading-6 text-foreground/90",
+  "[&_p]:text-[13px] [&_p]:leading-6",
+  "[&_li]:text-[13px] [&_li]:leading-6",
+  "[&_blockquote]:text-[13px] [&_blockquote]:leading-6",
+  "[&_h1]:text-lg [&_h1]:leading-7 [&_h1]:font-semibold",
+  "[&_h2]:text-base [&_h2]:leading-6 [&_h2]:font-semibold",
+  "[&_h3]:text-sm [&_h3]:leading-6 [&_h3]:font-semibold",
+  "[&_h4]:text-[13px] [&_h4]:leading-6 [&_h4]:font-semibold",
+  "[&_th]:text-xs [&_th]:leading-5",
+  "[&_td]:text-xs [&_td]:leading-5",
+  "[&_code]:text-[12px]",
+  "[&_pre]:text-[12px] [&_pre]:leading-5",
+  "[&_pre_code]:text-[12px] [&_pre_code]:leading-5"
+);
 
 // ─── SkillDetail ──────────────────────────────────────────────────────────────
 
 export function SkillDetail() {
   const { skillId } = useParams<{ skillId: string }>();
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const location = useLocation();
+  const { t, i18n } = useTranslation();
 
   // Store data
   const detail = useSkillDetailStore((s) => s.detail);
@@ -134,6 +177,14 @@ export function SkillDetail() {
   const loadDetail = useSkillDetailStore((s) => s.loadDetail);
   const installSkill = useSkillDetailStore((s) => s.installSkill);
   const uninstallSkill = useSkillDetailStore((s) => s.uninstallSkill);
+  const explanation = useSkillDetailStore((s) => s.explanation);
+  const isExplanationLoading = useSkillDetailStore((s) => s.isExplanationLoading);
+  const isExplanationStreaming = useSkillDetailStore((s) => s.isExplanationStreaming);
+  const explanationError = useSkillDetailStore((s) => s.explanationError);
+  const explanationErrorInfo = useSkillDetailStore((s) => s.explanationErrorInfo);
+  const loadCachedExplanation = useSkillDetailStore((s) => s.loadCachedExplanation);
+  const generateExplanation = useSkillDetailStore((s) => s.generateExplanation);
+  const refreshExplanation = useSkillDetailStore((s) => s.refreshExplanation);
   const reset = useSkillDetailStore((s) => s.reset);
 
   // Platform agents (loaded at app init)
@@ -143,6 +194,7 @@ export function SkillDetail() {
   // Local UI state
   const [activeTab, setActiveTab] = useState<PreviewTab>("markdown");
   const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
 
   // Load detail on mount / skillId change, reset on unmount
   useEffect(() => {
@@ -153,6 +205,12 @@ export function SkillDetail() {
       reset();
     };
   }, [skillId, loadDetail, reset]);
+
+  useEffect(() => {
+    if (skillId && content) {
+      loadCachedExplanation(skillId, i18n.language);
+    }
+  }, [skillId, content, i18n.language, loadCachedExplanation]);
 
   // ── Derived values ───────────────────────────────────────────────────────
 
@@ -191,6 +249,29 @@ export function SkillDetail() {
     }
   }
 
+  function handleGenerateExplanation() {
+    if (skillId && content) {
+      generateExplanation(skillId, content, i18n.language);
+    }
+  }
+
+  function handleRefreshExplanation() {
+    if (skillId && content) {
+      refreshExplanation(skillId, content, i18n.language);
+    }
+  }
+
+  function handleGoBack() {
+    const restorationState = location.state?.scrollRestoration;
+    if (restorationState?.key) {
+      saveScrollPosition(restorationState.key, restorationState.scrollTop ?? 0);
+    }
+    navigate(-1);
+  }
+
+  const markdownContent = content ? stripFrontmatter(content) : "";
+  const isBrowserFallback = !isTauriRuntime() && !isLoading && !detail && !error;
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -198,7 +279,7 @@ export function SkillDetail() {
       {/* Header */}
       <div className="border-b border-border px-6 py-3 flex items-center gap-3 shrink-0">
         <button
-          onClick={() => navigate(-1)}
+          onClick={handleGoBack}
           className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
           aria-label={t("detail.goBack")}
         >
@@ -243,6 +324,20 @@ export function SkillDetail() {
           </div>
         )}
 
+        {!isLoading && !error && isBrowserFallback && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center space-y-3 max-w-md px-6">
+              <Bot className="size-8 mx-auto text-muted-foreground/60" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium">{t("detail.browserFallbackTitle")}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t("detail.browserFallbackDesc")}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Two-column layout: Preview (left) + Sidebar (right) */}
         {!isLoading && !error && detail && (
           <div className="flex h-full">
@@ -250,26 +345,129 @@ export function SkillDetail() {
             <div className="flex-1 min-w-0 overflow-auto">
               {activeTab === "markdown" ? (
                 <div
-                  className="markdown-body p-6"
+                  className={cn("markdown-body p-6", detailTypographyClassName)}
                   role="tabpanel"
                   aria-label={t("detail.markdown")}
                 >
                   {content ? (
-                    <ReactMarkdown>{content}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {markdownContent}
+                    </ReactMarkdown>
                   ) : (
                     <p className="text-sm text-muted-foreground italic">
                       {t("detail.noContent")}
                     </p>
                   )}
                 </div>
-              ) : (
+              ) : activeTab === "raw" ? (
                 <pre
-                  className="p-6 text-xs font-mono whitespace-pre-wrap break-words text-foreground/80"
+                  className="p-6 text-[12px] leading-5 font-mono whitespace-pre-wrap break-words text-foreground/80"
                   role="tabpanel"
                   aria-label={t("detail.rawSource")}
                 >
                   {content ?? t("detail.noContent")}
                 </pre>
+              ) : (
+                <div
+                  className="p-6 space-y-4"
+                  role="tabpanel"
+                  aria-label={t("detail.aiExplanation")}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-semibold flex items-center gap-2">
+                        <Bot className="size-4 text-primary" />
+                        {t("detail.aiExplanation")}
+                      </h2>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {t("detail.aiExplanationDesc")}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={explanation ? handleRefreshExplanation : handleGenerateExplanation}
+                      disabled={!content || isExplanationLoading || isExplanationStreaming}
+                      className="gap-1.5"
+                    >
+                      {isExplanationLoading || isExplanationStreaming ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : explanation ? (
+                        <RefreshCw className="size-3.5" />
+                      ) : (
+                        <Bot className="size-3.5" />
+                      )}
+                      {explanation ? t("detail.regenerateExplanation") : t("detail.generateExplanation")}
+                    </Button>
+                  </div>
+
+                  {explanationError && (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                      <p className="text-sm text-destructive">
+                        {explanationErrorInfo?.message || explanationError}
+                      </p>
+                      {(explanationErrorInfo?.details || explanationError !== explanationErrorInfo?.message) && (
+                        <div>
+                          <button
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                            onClick={() => setShowErrorDetails((v) => !v)}
+                          >
+                            {showErrorDetails ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                            {t("detail.showDetails")}
+                          </button>
+                          {showErrorDetails && (
+                            <pre className="mt-1.5 text-[11px] leading-4 font-mono text-muted-foreground whitespace-pre-wrap break-all bg-muted/30 rounded-md p-2 max-h-40 overflow-auto">
+                              {explanationErrorInfo?.details || explanationError}
+                            </pre>
+                          )}
+                        </div>
+                      )}
+                      {explanationErrorInfo?.fallbackTried && (
+                        <p className="text-xs text-muted-foreground">
+                          {t("detail.fallbackTried")}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {isExplanationLoading && !explanation ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" />
+                      {t("detail.explanationLoading")}
+                    </div>
+                  ) : explanation ? (
+                    <div className={cn("markdown-body rounded-lg border border-border bg-card p-4", detailTypographyClassName)}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {explanation}
+                      </ReactMarkdown>
+                      {isExplanationStreaming && (
+                        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="size-3.5 animate-spin" />
+                          {t("detail.explanationStreaming")}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
+                      <Bot className="size-8 mx-auto text-muted-foreground/60" />
+                      <div>
+                        <p className="text-sm font-medium">{t("detail.noExplanationTitle")}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {t("detail.noExplanationDesc")}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={handleGenerateExplanation}
+                        disabled={!content || isExplanationLoading || isExplanationStreaming}
+                        className="gap-1.5"
+                      >
+                        <Bot className="size-3.5" />
+                        {t("detail.generateExplanation")}
+                      </Button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 

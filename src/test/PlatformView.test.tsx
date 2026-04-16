@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { PlatformView } from "../pages/PlatformView";
 import { AgentWithStatus, ScannedSkill } from "../types";
+import { consumeScrollPosition } from "../lib/scrollRestoration";
 
 // Mock stores
 vi.mock("../stores/platformStore", () => ({
@@ -13,8 +14,13 @@ vi.mock("../stores/skillStore", () => ({
   useSkillStore: vi.fn(),
 }));
 
+vi.mock("../stores/centralSkillsStore", () => ({
+  useCentralSkillsStore: vi.fn(),
+}));
+
 import { usePlatformStore } from "../stores/platformStore";
 import { useSkillStore } from "../stores/skillStore";
+import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -51,6 +57,8 @@ const mockSkills: ScannedSkill[] = [
 ];
 
 const mockGetSkillsByAgent = vi.fn();
+const mockLoadCentralSkills = vi.fn();
+const mockInstallSkill = vi.fn();
 
 function buildPlatformStoreState(overrides = {}) {
   return {
@@ -85,6 +93,16 @@ function renderPlatformView(agentId = "claude-code") {
     if (typeof selector === "function") return selector(state);
     return state;
   });
+  vi.mocked(useCentralSkillsStore).mockImplementation((selector?: unknown) => {
+    const state = {
+      skills: [],
+      agents: [mockAgent],
+      loadCentralSkills: mockLoadCentralSkills,
+      installSkill: mockInstallSkill,
+    };
+    if (typeof selector === "function") return selector(state);
+    return state;
+  });
 
   return render(
     <MemoryRouter initialEntries={[`/platform/${agentId}`]}>
@@ -100,6 +118,10 @@ function renderPlatformView(agentId = "claude-code") {
 describe("PlatformView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    consumeScrollPosition("platform:claude-code");
   });
 
   // ── Header ────────────────────────────────────────────────────────────────
@@ -242,5 +264,117 @@ describe("PlatformView", () => {
   it("calls getSkillsByAgent on mount", () => {
     renderPlatformView();
     expect(mockGetSkillsByAgent).toHaveBeenCalledWith("claude-code");
+  });
+
+  it("passes platform-specific scroll restoration state when opening detail", async () => {
+    render(
+      <MemoryRouter initialEntries={["/platform/claude-code"]}>
+        <Routes>
+          <Route path="/platform/:agentId" element={<PlatformView />} />
+          <Route path="/skill/:skillId" element={<div>detail-route</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const scroller = screen.getByText("frontend-design").closest("[class*='overflow-auto']");
+    expect(scroller).not.toBeNull();
+    if (!scroller) return;
+
+    Object.defineProperty(scroller, "scrollTop", {
+      value: 180,
+      writable: true,
+      configurable: true,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /查看 frontend-design 的详情/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("detail-route")).toBeInTheDocument();
+    });
+
+    const historyState = window.history.state?.usr;
+    expect(historyState.scrollRestoration).toEqual({
+      key: "platform:claude-code",
+      scrollTop: 180,
+    });
+  });
+
+  it("restores platform scroll after async hydration completes", async () => {
+    let skillState = buildSkillStoreState({
+      skillsByAgent: { "claude-code": [] },
+      loadingByAgent: { "claude-code": true },
+    });
+
+    vi.mocked(usePlatformStore).mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState();
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    vi.mocked(useSkillStore).mockImplementation((selector?: unknown) => {
+      if (typeof selector === "function") return selector(skillState);
+      return skillState;
+    });
+    vi.mocked(useCentralSkillsStore).mockImplementation((selector?: unknown) => {
+      const state = {
+        skills: [],
+        agents: [mockAgent],
+        loadCentralSkills: mockLoadCentralSkills,
+        installSkill: mockInstallSkill,
+      };
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    const { rerender } = render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/platform/claude-code",
+            state: {
+              scrollRestoration: {
+                key: "platform:claude-code",
+                scrollTop: 420,
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/platform/:agentId" element={<PlatformView />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("正在加载技能...")).toBeInTheDocument();
+    expect(consumeScrollPosition("platform:claude-code")).toBeNull();
+
+    skillState = buildSkillStoreState();
+    rerender(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/platform/claude-code",
+            state: {
+              scrollRestoration: {
+                key: "platform:claude-code",
+                scrollTop: 420,
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/platform/:agentId" element={<PlatformView />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const scroller = screen.getByText("frontend-design").closest("[class*='overflow-auto']");
+    expect(scroller).not.toBeNull();
+    if (!scroller) return;
+
+    await waitFor(() => {
+      expect((scroller as HTMLDivElement).scrollTop).toBe(420);
+    });
   });
 });
