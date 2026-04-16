@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Pencil, Loader2, FolderOpen, Cpu, Info, Database, Globe, Palette, Droplets } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2, FolderOpen, Cpu, Info, Database, Globe, Palette, Droplets, Bot } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
@@ -18,7 +19,9 @@ import { useThemeStore, CatppuccinFlavor, CatppuccinAccent, ACCENT_NAMES } from 
 import { usePlatformStore } from "@/stores/platformStore";
 import { AddDirectoryDialog } from "@/components/settings/AddDirectoryDialog";
 import { PlatformDialog } from "@/components/settings/PlatformDialog";
+import { Input } from "@/components/ui/input";
 import { AgentWithStatus, ScanDirectory } from "@/types";
+import { AI_PROVIDERS, REGION_LABELS, RegionId } from "@/data/aiProviders";
 
 // ─── App constants ────────────────────────────────────────────────────────────
 
@@ -55,7 +58,7 @@ const CTP_VAR_MAP: Record<CatppuccinAccent, string> = {
   lavender: "--ctp-lavender",
 };
 
-const FLAVOR_ORDER: CatppuccinFlavor[] = ["mocha", "macchiato", "frappe", "latte"];
+const FLAVOR_ORDER: CatppuccinFlavor[] = ["mocha", "frappe", "latte"];
 
 // ─── ScanDirectoryRow ─────────────────────────────────────────────────────────
 
@@ -192,7 +195,74 @@ export function SettingsView() {
 
   // ── Local State ────────────────────────────────────────────────────────────
 
+  // AI Provider state
+  const [aiProvider, setAiProvider] = useState("claude");
+  const [aiRegion, setAiRegion] = useState<RegionId>("intl");
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [aiModel, setAiModel] = useState("");
+  const [aiCustomUrl, setAiCustomUrl] = useState("");
+  const [aiLoaded, setAiLoaded] = useState(false);
+
+  // Load AI settings on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const provider = await invoke<string | null>("get_setting", { key: "ai_provider" });
+        const region = await invoke<string | null>("get_setting", { key: "ai_region" });
+        const key = await invoke<string | null>("get_setting", { key: "ai_api_key" });
+        const model = await invoke<string | null>("get_setting", { key: "ai_model" });
+        const url = await invoke<string | null>("get_setting", { key: "ai_api_url" });
+        if (provider) setAiProvider(provider);
+        if (region) setAiRegion(region as RegionId);
+        if (key) setAiApiKey(key);
+        if (model) setAiModel(model);
+        if (url) setAiCustomUrl(url);
+      } catch { /* first run, no settings yet */ }
+      setAiLoaded(true);
+    })();
+  }, []);
+
+  // Save AI settings when changed
+  useEffect(() => {
+    if (!aiLoaded) return;
+    const save = async () => {
+      try {
+        await invoke("set_setting", { key: "ai_provider", value: aiProvider });
+        await invoke("set_setting", { key: "ai_region", value: aiRegion });
+        await invoke("set_setting", { key: "ai_api_key", value: aiApiKey });
+        await invoke("set_setting", { key: "ai_model", value: aiModel });
+        // Compute and save the actual API URL
+        const p = AI_PROVIDERS.find((x) => x.id === aiProvider);
+        const url = aiProvider === "custom" ? aiCustomUrl : (p?.endpoints[aiRegion] ?? "");
+        await invoke("set_setting", { key: "ai_api_url", value: url });
+      } catch { /* ignore */ }
+    };
+    save();
+  }, [aiProvider, aiRegion, aiApiKey, aiModel, aiCustomUrl, aiLoaded]);
+
+  // When provider or region changes, update model to default
+  function handleProviderChange(id: string) {
+    setAiProvider(id);
+    const p = AI_PROVIDERS.find((x) => x.id === id);
+    if (p) {
+      setAiModel(p.defaultModel);
+      // Auto-select first available region
+      if (!p.regions.includes(aiRegion)) {
+        setAiRegion(p.regions[0]);
+      }
+    }
+  }
+
+  const currentProvider = AI_PROVIDERS.find((p) => p.id === aiProvider);
+  const resolvedUrl = aiProvider === "custom"
+    ? aiCustomUrl
+    : (currentProvider?.endpoints[aiRegion] ?? "");
+  const lang = i18n.language;
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
   const [isAddDirOpen, setIsAddDirOpen] = useState(false);
+  const [showBuiltinDirs, setShowBuiltinDirs] = useState(false);
   const [isPlatformDialogOpen, setIsPlatformDialogOpen] = useState(false);
   const [editingPlatform, setEditingPlatform] = useState<AgentWithStatus | null>(null);
   const [removingDir, setRemovingDir] = useState<string | null>(null);
@@ -266,12 +336,13 @@ export function SettingsView() {
     setIsPlatformDialogOpen(true);
   }
 
-  async function handleAddPlatform(displayName: string, globalSkillsDir: string) {
+  async function handleAddPlatform(displayName: string, globalSkillsDir: string, category?: string) {
     setPlatformError(null);
     try {
       await addCustomAgent({
         display_name: displayName,
         global_skills_dir: globalSkillsDir,
+        category: category || "coding",
       });
       // Refresh agents + rescan to show new platform in sidebar.
       await rescan();
@@ -283,13 +354,14 @@ export function SettingsView() {
     }
   }
 
-  async function handleEditPlatform(displayName: string, globalSkillsDir: string) {
+  async function handleEditPlatform(displayName: string, globalSkillsDir: string, category?: string) {
     if (!editingPlatform) return;
     setPlatformError(null);
     try {
       await updateCustomAgent(editingPlatform.id, {
         display_name: displayName,
         global_skills_dir: globalSkillsDir,
+        category: category || "coding",
       });
       // Refresh agents + rescan.
       await rescan();
@@ -327,63 +399,9 @@ export function SettingsView() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6 space-y-6 max-w-3xl">
+      <div className="flex-1 overflow-auto p-6 space-y-6">
 
-        {/* ── Section 1: Scan Directories ──────────────────────────────────── */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>{t("settings.scanDirs")}</CardTitle>
-                <CardDescription className="mt-1">
-                  {t("settings.scanDirsDesc")}
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsAddDirOpen(true)}
-                aria-label={t("settings.addDirAriaLabel")}
-              >
-                <Plus className="size-3.5" />
-                <span>{t("settings.addDirectory")}</span>
-              </Button>
-            </div>
-          </CardHeader>
-
-          <CardContent>
-            {scanDirError && (
-              <p className="text-xs text-destructive mb-3" role="alert">
-                {scanDirError}
-              </p>
-            )}
-
-            {isLoadingScanDirs ? (
-              <div className="flex items-center gap-2 py-6 text-muted-foreground text-sm justify-center">
-                <Loader2 className="size-4 animate-spin" />
-                <span>{t("settings.loading")}</span>
-              </div>
-            ) : scanDirectories.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                {t("settings.noDirs")}
-              </p>
-            ) : (
-              <div className="rounded-lg border border-border overflow-hidden">
-                {scanDirectories.map((dir) => (
-                  <ScanDirectoryRow
-                    key={dir.id}
-                    dir={dir}
-                    onRemove={() => handleRemoveDirectory(dir.path)}
-                    onToggle={(active) => handleToggleDirectory(dir.path, active)}
-                    isRemoving={removingDir === dir.path}
-                  />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Section 2: Custom Platforms ───────────────────────────────────── */}
+        {/* ── Section 1: Custom Platforms ───────────────────────────────────── */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -432,7 +450,149 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
-        {/* ── Section 3: About ────────────────────────────────────────────── */}
+        {/* ── Section 2: AI Provider ─────────────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Bot className="size-5 text-muted-foreground" />
+              <div>
+                <CardTitle>{lang === "zh" ? "AI 提供商" : "AI Provider"}</CardTitle>
+                <CardDescription className="mt-1">
+                  {lang === "zh" ? "配置用于技能解释的 AI 服务。所有提供商兼容 Anthropic API 格式。" : "Configure AI service for skill explanation. All providers use Anthropic-compatible API."}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-2 block">{lang === "zh" ? "提供商" : "Provider"}</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {AI_PROVIDERS.map((p) => (
+                    <button key={p.id} onClick={() => handleProviderChange(p.id)} className={`px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border ${aiProvider === p.id ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-hover-bg/10"}`}>
+                      {lang === "zh" ? p.name.zh : p.name.en}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {currentProvider && currentProvider.regions.length > 1 && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-2 block">{lang === "zh" ? "区域" : "Region"}</label>
+                  <div className="flex gap-1.5">
+                    {currentProvider.regions.map((r) => (
+                      <button key={r} onClick={() => setAiRegion(r)} className={`px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border ${aiRegion === r ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}>
+                        {lang === "zh" ? REGION_LABELS[r].zh : REGION_LABELS[r].en}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">API Key</label>
+                <Input type="password" placeholder="sk-..." value={aiApiKey} onChange={(e) => setAiApiKey(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">{lang === "zh" ? "模型" : "Model"}</label>
+                <Input placeholder={lang === "zh" ? "模型名称" : "Model name"} value={aiModel} onChange={(e) => setAiModel(e.target.value)} />
+              </div>
+              {aiProvider === "custom" && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">API URL</label>
+                  <Input placeholder="https://..." value={aiCustomUrl} onChange={(e) => setAiCustomUrl(e.target.value)} />
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                {resolvedUrl && (
+                  <div className="text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2 font-mono truncate flex-1 min-w-0">{resolvedUrl}</div>
+                )}
+                <Button variant="outline" size="sm" disabled={aiTesting || !aiApiKey || !resolvedUrl} onClick={async () => {
+                  setAiTesting(true); setAiTestResult(null);
+                  try {
+                    const result = await invoke<string>("explain_skill", { content: "Test connection. Reply with: OK" });
+                    setAiTestResult({ ok: true, msg: result.slice(0, 60) });
+                  } catch (err) { setAiTestResult({ ok: false, msg: String(err) }); }
+                  finally { setAiTesting(false); }
+                }} className="shrink-0">
+                  {aiTesting ? <Loader2 className="size-3.5 animate-spin" /> : <Bot className="size-3.5" />}
+                  <span>{lang === "zh" ? "测试连接" : "Test"}</span>
+                </Button>
+              </div>
+              {aiTestResult && (
+                <div className={`text-xs rounded-md px-3 py-2 ${aiTestResult.ok ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-destructive/10 text-destructive"}`}>
+                  {aiTestResult.ok ? "✓ " : "✕ "}{aiTestResult.msg}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Section 3: Scan Directories (compact) ─────────────────────── */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>{t("settings.scanDirs")}</CardTitle>
+                <CardDescription className="mt-1">{t("settings.scanDirsDesc")}</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setIsAddDirOpen(true)} aria-label={t("settings.addDirAriaLabel")}>
+                <Plus className="size-3.5" />
+                <span>{t("settings.addDirectory")}</span>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {scanDirError && <p className="text-xs text-destructive mb-3" role="alert">{scanDirError}</p>}
+            {isLoadingScanDirs ? (
+              <div className="flex items-center gap-2 py-4 text-muted-foreground text-sm justify-center">
+                <Loader2 className="size-4 animate-spin" />
+                <span>{t("settings.loading")}</span>
+              </div>
+            ) : (() => {
+              const customDirs = scanDirectories.filter((d) => !d.is_builtin);
+              const builtinDirs = scanDirectories.filter((d) => d.is_builtin);
+              return (
+                <div className="space-y-3">
+                  {/* Custom dirs first */}
+                  {customDirs.length > 0 && (
+                    <div className="rounded-lg border border-border overflow-hidden">
+                      {customDirs.map((dir) => (
+                        <ScanDirectoryRow key={dir.id} dir={dir} onRemove={() => handleRemoveDirectory(dir.path)} onToggle={(active) => handleToggleDirectory(dir.path, active)} isRemoving={removingDir === dir.path} />
+                      ))}
+                    </div>
+                  )}
+                  {customDirs.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-2">{t("settings.noDirs")}</p>
+                  )}
+                  {/* Built-in dirs — collapsible, two-column */}
+                  {builtinDirs.length > 0 && (
+                    <div>
+                      <button
+                        onClick={() => setShowBuiltinDirs((v) => !v)}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      >
+                        <span>{showBuiltinDirs ? "▾" : "▸"}</span>
+                        <span>{t("settings.builtinDir")} ({builtinDirs.length})</span>
+                      </button>
+                      {showBuiltinDirs && (
+                        <div className="grid grid-cols-2 gap-1.5 mt-2">
+                          {builtinDirs.map((dir) => (
+                            <div key={dir.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/30 text-xs text-muted-foreground truncate">
+                              <FolderOpen className="size-3 shrink-0" />
+                              <span className="truncate">{dir.path.replace(/^.*\/\./, "~/.")}</span>
+                              {dir.label && <span className="shrink-0 opacity-60">· {dir.label}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+
+        {/* ── Section 4: About ────────────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle>{t("settings.about")}</CardTitle>

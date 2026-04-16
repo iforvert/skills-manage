@@ -3,7 +3,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { PlatformView } from "@/pages/PlatformView";
 import { CentralSkillsView } from "@/pages/CentralSkillsView";
 import { SkillDetail } from "@/pages/SkillDetail";
-import { CollectionView } from "@/pages/CollectionView";
+import { CollectionsListView } from "@/pages/CollectionsListView";
+import { MarketplaceView } from "@/pages/MarketplaceView";
 import { SettingsView } from "@/pages/SettingsView";
 import { DiscoverView } from "@/pages/DiscoverView";
 
@@ -19,8 +20,10 @@ function App() {
         <Route path="central" element={<CentralSkillsView />} />
         {/* Skill detail page */}
         <Route path="skill/:skillId" element={<SkillDetail />} />
-        {/* Collection view */}
-        <Route path="collection/:collectionId" element={<CollectionView />} />
+        {/* Collections */}
+        <Route path="collections" element={<CollectionsListView />} />
+        {/* Marketplace */}
+        <Route path="marketplace" element={<MarketplaceView />} />
         {/* Discover project skills */}
         <Route path="discover" element={<DiscoverView />} />
         {/* Discover filtered by project */}

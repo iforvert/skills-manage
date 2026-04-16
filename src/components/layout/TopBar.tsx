@@ -1,9 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Search, Settings } from "lucide-react";
+import { Blocks, Search, Settings } from "lucide-react";
 
 import { usePlatformStore } from "@/stores/platformStore";
-import { useCollectionStore } from "@/stores/collectionStore";
 import { useDiscoverStore } from "@/stores/discoverStore";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +17,6 @@ export function TopBar({ onSearchClick }: TopBarProps) {
 
   const agents = usePlatformStore((s) => s.agents);
   const skillsByAgent = usePlatformStore((s) => s.skillsByAgent);
-  const collections = useCollectionStore((s) => s.collections);
   const totalDiscovered = useDiscoverStore((s) => s.totalSkillsFound);
   const isScanning = useDiscoverStore((s) => s.isScanning);
 
@@ -39,10 +37,11 @@ export function TopBar({ onSearchClick }: TopBarProps) {
     if (pathname.startsWith("/discover")) {
       return { label: t("sidebar.discovered"), count: totalDiscovered };
     }
-    if (pathname.startsWith("/collection/")) {
-      const colId = pathname.split("/collection/")[1];
-      const col = collections.find((c) => c.id === colId);
-      return { label: col?.name ?? t("sidebar.collections"), count: undefined };
+    if (pathname === "/marketplace") {
+      return { label: t("marketplace.title"), count: undefined };
+    }
+    if (pathname === "/collections") {
+      return { label: t("sidebar.collections"), count: undefined };
     }
     if (pathname === "/settings") {
       return { label: t("sidebar.settings"), count: undefined };
@@ -59,31 +58,21 @@ export function TopBar({ onSearchClick }: TopBarProps) {
 
   return (
     <header className="flex items-center h-12 px-4 border-b border-border bg-sidebar text-sidebar-foreground shrink-0 gap-3">
-      {/* Logo + View name */}
-      <div className="flex items-center gap-2 min-w-0 shrink-0">
-        <span className="text-sm font-bold tracking-tight text-sidebar-primary">
-          {t("app.name")}
-        </span>
-        {viewInfo.label && (
-          <>
-            <span className="text-muted-foreground/40">/</span>
-            <span className="text-sm text-muted-foreground truncate">
-              {viewInfo.label}
-            </span>
-            {viewInfo.count !== undefined && viewInfo.count > 0 && (
-              <span className="text-xs text-muted-foreground/60">
-                ({viewInfo.count})
-              </span>
-            )}
-          </>
-        )}
-      </div>
+      {/* App icon */}
+      <button
+        onClick={() => navigate("/central")}
+        className="p-1.5 rounded-md transition-colors cursor-pointer text-sidebar-primary hover:bg-muted/60 shrink-0"
+        aria-label={t("app.name")}
+        title={t("app.name")}
+      >
+        <Blocks className="size-4" />
+      </button>
 
-      {/* Search trigger */}
+      {/* Search trigger — left-center position */}
       <button
         onClick={onSearchClick}
         className={cn(
-          "flex items-center gap-2 flex-1 max-w-xs h-8 px-3 rounded-md text-sm",
+          "flex items-center gap-2 w-full max-w-sm h-8 px-3 rounded-md text-sm",
           "bg-muted/40 text-muted-foreground border border-border/50",
           "hover:bg-muted/60 hover:border-border transition-colors cursor-pointer"
         )}
@@ -97,9 +86,25 @@ export function TopBar({ onSearchClick }: TopBarProps) {
         </kbd>
       </button>
 
+      {/* Breadcrumb / view label */}
+      {viewInfo.label && (
+        <div className="flex items-center gap-1.5 min-w-0 shrink-0 text-muted-foreground">
+          <span className="text-muted-foreground/40">/</span>
+          <span className="text-sm truncate">{viewInfo.label}</span>
+          {viewInfo.count !== undefined && viewInfo.count > 0 && (
+            <span className="text-xs text-muted-foreground/60">
+              ({viewInfo.count})
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
       {/* Scan indicator */}
       {isScanning && (
-        <div className="flex items-center gap-1.5 text-xs text-primary">
+        <div className="flex items-center gap-1.5 text-xs text-primary shrink-0">
           <span className="relative flex size-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
             <span className="relative inline-flex rounded-full size-2 bg-primary" />
@@ -108,14 +113,11 @@ export function TopBar({ onSearchClick }: TopBarProps) {
         </div>
       )}
 
-      {/* Spacer */}
-      <div className="flex-1" />
-
       {/* Settings */}
       <button
         onClick={() => navigate("/settings")}
         className={cn(
-          "p-1.5 rounded-md transition-colors cursor-pointer",
+          "p-1.5 rounded-md transition-colors cursor-pointer shrink-0",
           "text-muted-foreground hover:text-foreground hover:bg-muted/60",
           pathname === "/settings" && "bg-muted/60 text-foreground"
         )}

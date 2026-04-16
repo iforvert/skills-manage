@@ -2,9 +2,9 @@ import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
-  PackageOpen,
-  FolderSearch,
-  Folder,
+  Blocks,
+  Radar,
+  Layers,
   RefreshCw,
   Plus,
   ArrowUpRight,
@@ -68,7 +68,7 @@ export function GlobalSearchDialog({
         label: skill.name,
         description: skill.description,
         group: t("globalSearch.centralSkills"),
-        icon: <PackageOpen className="size-4 shrink-0 text-primary/70" />,
+        icon: <Blocks className="size-4 shrink-0 text-primary/70" />,
         onSelect: () => {
           close();
           navigate(`/skill/${skill.id}`);
@@ -84,7 +84,7 @@ export function GlobalSearchDialog({
         label: skill.name,
         description: `${skill.project_name} / ${skill.platform_name}`,
         group: t("globalSearch.discovered"),
-        icon: <FolderSearch className="size-4 shrink-0 text-primary/70" />,
+        icon: <Radar className="size-4 shrink-0 text-primary/70" />,
         onSelect: () => {
           close();
           navigate("/discover");
@@ -99,7 +99,7 @@ export function GlobalSearchDialog({
         label: col.name,
         description: col.description,
         group: t("globalSearch.collections"),
-        icon: <Folder className="size-4 shrink-0 text-primary/70" />,
+        icon: <Layers className="size-4 shrink-0 text-primary/70" />,
         onSelect: () => {
           close();
           navigate(`/collection/${col.id}`);

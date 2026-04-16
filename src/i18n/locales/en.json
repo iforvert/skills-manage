@@ -34,7 +34,9 @@
     "importCollectionInput": "Import collection JSON file",
     "mainNav": "Main navigation",
     "discovered": "Discovered",
-    "rescan": "Re-scan..."
+    "rescan": "Re-scan...",
+    "categoryLobster": "Lobster",
+    "categoryCoding": "Coding"
   },
   "platform": {
     "searchPlaceholder": "Search skills...",
@@ -61,7 +63,8 @@
     "installError": "Install failed: {{error}}",
     "refreshError": "Refresh failed: {{error}}",
     "linked": "linked",
-    "notLinked": "not linked"
+    "notLinked": "not linked",
+    "toggleInstallLabel": "Toggle {{platform}} link for {{skill}}"
   },
   "installDialog": {
     "title": "Install {{name}}",
@@ -256,6 +259,9 @@
     "dirLabel": "Skills Directory Path",
     "dirPlaceholder": "e.g. ~/.qclaw/skills/",
     "dirRequired": "Skills directory path cannot be empty",
+    "dirAutoHint": "Auto-generated from Platform Name. You can edit it freely.",
+    "dirManualHint": "Path manually set. Editing Platform Name won't change it.",
+    "categoryLabel": "Category",
     "cancel": "Cancel",
     "add": "Add",
     "adding": "Adding...",
@@ -324,5 +330,20 @@
     "selectSkill": "Select skill",
     "selectAll": "Select all visible",
     "deselectAll": "Deselect all"
+  },
+  "marketplace": {
+    "title": "Marketplace",
+    "desc": "Browse and install skills from remote sources",
+    "sync": "Sync",
+    "syncing": "Syncing...",
+    "install": "Install",
+    "installed": "Installed",
+    "noSkills": "No skills cached yet",
+    "noSkillsDesc": "Click \"Sync\" to fetch skills from this source",
+    "syncNow": "Sync Now",
+    "searchPlaceholder": "Search skills...",
+    "addSource": "Add Source",
+    "installSuccess": "Skill installed successfully",
+    "installError": "Install failed: {{error}}"
   }
 }

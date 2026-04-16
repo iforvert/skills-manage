@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { Loader2, Search } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { Loader2, Search, CheckSquare, XSquare } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 
@@ -89,6 +89,14 @@ export function SkillPickerDialog({
     });
   }
 
+  const handleSelectAll = useCallback(() => {
+    setSelectedSkillIds(new Set(filteredSkills.map((s) => s.id)));
+  }, [filteredSkills]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedSkillIds(new Set());
+  }, []);
+
   async function handleAdd() {
     const ids = Array.from(selectedSkillIds);
     if (ids.length === 0) return;
@@ -107,42 +115,67 @@ export function SkillPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="!w-[90vw] !max-w-5xl">
         <DialogHeader>
           <DialogTitle>{t("skillPicker.title")}</DialogTitle>
           <DialogClose />
         </DialogHeader>
 
-        <DialogBody className="space-y-4">
+        <DialogBody className="space-y-4 !overflow-visible !max-h-none">
           <DialogDescription>
             {t("skillPicker.desc")}
           </DialogDescription>
 
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder={t("skillPicker.searchPlaceholder")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8"
-              aria-label={t("skillPicker.searchPlaceholder")}
-            />
+          {/* Search + Select All / Clear */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder={t("skillPicker.searchPlaceholder")}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8"
+                aria-label={t("skillPicker.searchPlaceholder")}
+              />
+            </div>
+            {filteredSkills.length > 0 && (
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSelectAll}
+                  disabled={isLoading}
+                >
+                  <CheckSquare className="size-3.5" />
+                  <span>{t("discover.selectAll")}</span>
+                </Button>
+                {selectedSkillIds.size > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearSelection}
+                  >
+                    <XSquare className="size-3.5" />
+                    <span>{t("discover.deselectAll")}</span>
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Skill list */}
           <div
-            className="max-h-64 overflow-y-auto space-y-1.5 border border-border rounded-md p-2"
+            className="max-h-[60vh] overflow-y-auto grid grid-cols-2 gap-2 border border-border rounded-md p-2"
             role="group"
             aria-label={t("skillPicker.selectSkills")}
           >
             {isLoading ? (
-              <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground text-sm">
+              <div className="col-span-2 flex items-center justify-center py-6 gap-2 text-muted-foreground text-sm">
                 <Loader2 className="size-4 animate-spin" />
                 {t("skillPicker.loading")}
               </div>
             ) : filteredSkills.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
+              <p className="col-span-2 text-sm text-muted-foreground text-center py-6">
                 {skills.length === 0
                   ? t("skillPicker.noSkills")
                   : existingSkillIds.length === skills.length

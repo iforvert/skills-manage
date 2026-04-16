@@ -23,8 +23,8 @@ interface PlatformDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Pass a platform to edit it; null for create mode. */
   platform: AgentWithStatus | null;
-  onAdd?: (displayName: string, globalSkillsDir: string) => Promise<void>;
-  onEdit?: (displayName: string, globalSkillsDir: string) => Promise<void>;
+  onAdd?: (displayName: string, globalSkillsDir: string, category?: string) => Promise<void>;
+  onEdit?: (displayName: string, globalSkillsDir: string, category?: string) => Promise<void>;
 }
 
 // ─── PlatformDialog ───────────────────────────────────────────────────────────
@@ -41,6 +41,8 @@ export function PlatformDialog({
 
   const [displayName, setDisplayName] = useState("");
   const [globalSkillsDir, setGlobalSkillsDir] = useState("");
+  const [dirManuallyEdited, setDirManuallyEdited] = useState(false);
+  const [category, setCategory] = useState<"coding" | "lobster">("coding");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
   const [dirError, setDirError] = useState<string | null>(null);
@@ -51,6 +53,8 @@ export function PlatformDialog({
     if (open) {
       setDisplayName(platform?.display_name ?? "");
       setGlobalSkillsDir(platform?.global_skills_dir ?? "");
+      setDirManuallyEdited(isEditMode);
+      setCategory((platform?.category as "coding" | "lobster") ?? "coding");
       setNameError(null);
       setDirError(null);
       setError(null);
@@ -82,9 +86,9 @@ export function PlatformDialog({
 
     try {
       if (isEditMode && onEdit) {
-        await onEdit(trimmedName, trimmedDir);
+        await onEdit(trimmedName, trimmedDir, category);
       } else if (!isEditMode && onAdd) {
-        await onAdd(trimmedName, trimmedDir);
+        await onAdd(trimmedName, trimmedDir, category);
       }
       onOpenChange(false);
     } catch (err) {
@@ -121,8 +125,14 @@ export function PlatformDialog({
               placeholder={t("platformDialog.namePlaceholder")}
               value={displayName}
               onChange={(e) => {
-                setDisplayName(e.target.value);
+                const name = e.target.value;
+                setDisplayName(name);
                 if (nameError) setNameError(null);
+                // Auto-generate path from name if user hasn't manually edited it
+                if (!dirManuallyEdited && !isEditMode) {
+                  const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+                  setGlobalSkillsDir(slug ? `~/.${slug}/skills/` : "");
+                }
               }}
               disabled={isSubmitting}
               autoFocus
@@ -145,6 +155,7 @@ export function PlatformDialog({
               value={globalSkillsDir}
               onChange={(e) => {
                 setGlobalSkillsDir(e.target.value);
+                setDirManuallyEdited(true);
                 if (dirError) setDirError(null);
               }}
               disabled={isSubmitting}
@@ -154,6 +165,37 @@ export function PlatformDialog({
                 {dirError}
               </p>
             )}
+            {!dirError && !isEditMode && (
+              <p className="text-xs text-muted-foreground">
+                {dirManuallyEdited
+                  ? (t("platformDialog.dirManualHint") || "Path manually set. Edit Platform Name won't change it.")
+                  : (t("platformDialog.dirAutoHint") || "Auto-generated from Platform Name. You can edit it freely.")}
+              </p>
+            )}
+          </div>
+
+          {/* Category */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">
+              {t("platformDialog.categoryLabel") || "Category"}
+            </label>
+            <div className="flex gap-1.5">
+              {(["coding", "lobster"] as const).map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setCategory(cat)}
+                  disabled={isSubmitting}
+                  className={`px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border ${
+                    category === cat
+                      ? "bg-primary/15 border-primary text-foreground font-medium"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  {cat === "coding" ? (t("sidebar.categoryCoding") || "Coding") : (t("sidebar.categoryLobster") || "Lobster")}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Backend error */}

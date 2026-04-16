@@ -119,6 +119,55 @@ pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+// ─── Auto-centralize ─────────────────────────────────────────────────────────
+
+/// Ensure the skill exists in the central directory. If it doesn't, copy it
+/// from its actual location (looked up in the database) and update the DB
+/// record to mark it as central.
+///
+/// This enables installing platform-specific skills to other platforms:
+/// the skill is first adopted into the central directory, then distributed
+/// via symlink/copy as usual.
+async fn ensure_centralized(
+    pool: &DbPool,
+    skill_id: &str,
+    canonical_dir: &Path,
+) -> Result<(), String> {
+    if canonical_dir.join("SKILL.md").exists() {
+        return Ok(());
+    }
+
+    // Look up the skill's actual file location from the database.
+    let skill = db::get_skill_by_id(pool, skill_id)
+        .await?
+        .ok_or_else(|| format!("Skill '{}' not found in database", skill_id))?;
+
+    // Derive the source directory (parent of file_path).
+    let source_file = PathBuf::from(&skill.file_path);
+    let source_dir = source_file
+        .parent()
+        .ok_or_else(|| format!("Invalid file_path for skill '{}'", skill_id))?;
+
+    if !source_file.exists() {
+        return Err(format!(
+            "Skill source not found at '{}'",
+            source_file.display()
+        ));
+    }
+
+    // Copy to central directory.
+    copy_dir_all(source_dir, canonical_dir)?;
+
+    // Update the DB record to reflect centralization.
+    let mut updated = skill;
+    updated.canonical_path = Some(canonical_dir.to_string_lossy().into_owned());
+    updated.is_central = true;
+    updated.file_path = canonical_dir.join("SKILL.md").to_string_lossy().into_owned();
+    db::upsert_skill(pool, &updated).await?;
+
+    Ok(())
+}
+
 // ─── Core Logic ───────────────────────────────────────────────────────────────
 
 /// Core install logic, separated from the Tauri layer for testability.
@@ -153,14 +202,8 @@ pub async fn install_skill_to_agent_impl(
 
     let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
 
-    // 3. Verify that the canonical skill directory exists with a SKILL.md.
-    if !canonical_dir.join("SKILL.md").exists() {
-        return Err(format!(
-            "Canonical skill '{}' not found at '{}'",
-            skill_id,
-            canonical_dir.display()
-        ));
-    }
+    // 3. Ensure the skill exists in central (auto-centralize if needed).
+    ensure_centralized(pool, skill_id, &canonical_dir).await?;
 
     // 4. Compute symlink location.
     let agent_dir = PathBuf::from(&agent.global_skills_dir);
@@ -241,14 +284,8 @@ pub async fn install_skill_to_agent_copy_impl(
 
     let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
 
-    // 3. Verify that the canonical skill directory exists with a SKILL.md.
-    if !canonical_dir.join("SKILL.md").exists() {
-        return Err(format!(
-            "Canonical skill '{}' not found at '{}'",
-            skill_id,
-            canonical_dir.display()
-        ));
-    }
+    // 3. Ensure the skill exists in central (auto-centralize if needed).
+    ensure_centralized(pool, skill_id, &canonical_dir).await?;
 
     // 4. Compute target location.
     let agent_dir = PathBuf::from(&agent.global_skills_dir);

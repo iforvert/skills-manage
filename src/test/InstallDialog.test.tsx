@@ -132,11 +132,11 @@ describe("InstallDialog", () => {
 
   it("shows confirm button with count of selected platforms", () => {
     renderDialog();
-    // By default, unlinked agents (cursor, gemini-cli) should be pre-selected
-    // linked agents (claude-code) are not pre-selected by default
-    // So 2 are pre-selected: cursor and gemini-cli
+    // By default, linked agents (claude-code) are pre-selected.
+    // Unlinked agents (cursor, gemini-cli) are not pre-selected.
+    // So 1 is pre-selected: claude-code
     expect(
-      screen.getByRole("button", { name: /安装到 2 个平台/i })
+      screen.getByRole("button", { name: /安装到 1 个平台/i })
     ).toBeInTheDocument();
   });
 
@@ -243,34 +243,34 @@ describe("InstallDialog", () => {
   it("updates confirm button count when checkbox toggled", async () => {
     renderDialog();
 
-    // Initially 2 selected (cursor + gemini-cli)
+    // Initially 1 selected (claude-code, already linked)
     expect(
-      screen.getByRole("button", { name: /安装到 2 个平台/i })
+      screen.getByRole("button", { name: /安装到 1 个平台/i })
     ).toBeInTheDocument();
 
-    // Check Claude Code (add 1 more)
-    const claudeCheckbox = screen.getByLabelText("Claude Code");
-    fireEvent.click(claudeCheckbox);
+    // Check Cursor (add 1 more)
+    const cursorCheckbox = screen.getByLabelText("Cursor");
+    fireEvent.click(cursorCheckbox);
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /安装到 3 个平台/i })
+        screen.getByRole("button", { name: /安装到 2 个平台/i })
       ).toBeInTheDocument();
     });
   });
 
   it("disables confirm when no platforms selected", async () => {
-    // Start with all agents linked so none are pre-selected
-    const fullyLinkedSkill: SkillWithLinks = {
+    // Start with NO agents linked so none are pre-selected
+    const noLinkedSkill: SkillWithLinks = {
       ...mockSkill,
-      linked_agents: ["claude-code", "cursor", "gemini-cli"],
+      linked_agents: [],
     };
 
     render(
       <InstallDialog
         open={true}
         onOpenChange={mockOnOpenChange}
-        skill={fullyLinkedSkill}
+        skill={noLinkedSkill}
         agents={mockAgents}
         onInstall={mockOnInstall}
       />

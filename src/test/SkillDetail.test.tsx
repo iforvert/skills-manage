@@ -228,71 +228,47 @@ describe("SkillDetail", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows non-central agents in install status", () => {
+  it("shows platform toggle icons for non-central agents", () => {
     renderSkillDetail();
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
-    expect(screen.getByText("Cursor")).toBeInTheDocument();
-    // Central agent should NOT appear in install status list
-    const centralRows = screen.queryAllByText("Central Skills");
-    // Central Skills may still appear elsewhere (e.g. path labels)
-    // but not as a PlatformInstallRow agent name
-    expect(centralRows.length).toBeLessThanOrEqual(1);
+    // Each non-central agent should have a toggle icon button
+    const toggleButtons = screen.getAllByRole("button", {
+      name: /切换 .* 的链接状态/i,
+    });
+    // 2 non-central agents (claude-code, cursor)
+    expect(toggleButtons).toHaveLength(2);
   });
 
-  it("shows checkmark for installed platforms", () => {
+  it("shows platform name in tooltip on toggle icon", () => {
     renderSkillDetail();
-    // Claude Code is installed (in mockDetail.installations)
-    const checkmarks = screen.getAllByLabelText("已安装");
-    expect(checkmarks.length).toBeGreaterThan(0);
+    // Claude Code is installed — tooltip includes linked status
+    const claudeToggle = screen.getByRole("button", {
+      name: /切换 frontend-design 在 Claude Code 的链接状态/i,
+    });
+    expect(claudeToggle).toHaveAttribute("title", expect.stringContaining("Claude Code"));
   });
 
-  it("shows Install button for uninstalled platforms", () => {
+  it("calls installSkill when unlinked platform icon is clicked", async () => {
     renderSkillDetail();
     // Cursor is NOT installed
-    const installBtn = screen.getByRole("button", { name: /安装到 Cursor/i });
-    expect(installBtn).toBeInTheDocument();
-  });
-
-  it("shows Uninstall button for installed platforms", () => {
-    renderSkillDetail();
-    // Claude Code IS installed
-    const uninstallBtn = screen.getByRole("button", {
-      name: /从 Claude Code 卸载/i,
+    const cursorToggle = screen.getByRole("button", {
+      name: /切换 frontend-design 在 Cursor 的链接状态/i,
     });
-    expect(uninstallBtn).toBeInTheDocument();
-  });
-
-  it("calls installSkill when Install button is clicked", async () => {
-    renderSkillDetail();
-    const installBtn = screen.getByRole("button", { name: /安装到 Cursor/i });
-    fireEvent.click(installBtn);
+    fireEvent.click(cursorToggle);
     await waitFor(() => {
       expect(mockInstallSkill).toHaveBeenCalledWith("frontend-design", "cursor");
     });
   });
 
-  it("calls uninstallSkill when Uninstall button is clicked", async () => {
+  it("calls uninstallSkill when linked platform icon is clicked", async () => {
     renderSkillDetail();
-    const uninstallBtn = screen.getByRole("button", {
-      name: /从 Claude Code 卸载/i,
+    // Claude Code IS installed
+    const claudeToggle = screen.getByRole("button", {
+      name: /切换 frontend-design 在 Claude Code 的链接状态/i,
     });
-    fireEvent.click(uninstallBtn);
+    fireEvent.click(claudeToggle);
     await waitFor(() => {
       expect(mockUninstallSkill).toHaveBeenCalledWith("frontend-design", "claude-code");
     });
-  });
-
-  it("shows the installed path for an installed platform", () => {
-    renderSkillDetail();
-    expect(screen.getByText("~/.claude/skills/frontend-design")).toBeInTheDocument();
-  });
-
-  it("shows installation timestamp for an installed platform", () => {
-    renderSkillDetail();
-    // installed_at is "2026-04-09T12:00:00Z" — the formatted date should appear
-    // The text shows "安装于 Apr 9, 2026" (or similar locale-dependent format)
-    const timestampEl = screen.getByText(/安装于/i);
-    expect(timestampEl).toBeInTheDocument();
   });
 
   // ── Collections ───────────────────────────────────────────────────────────
@@ -335,9 +311,10 @@ describe("SkillDetail", () => {
 
   // ── SKILL.md Preview ──────────────────────────────────────────────────────
 
-  it("shows SKILL.md preview section", () => {
+  it("shows SKILL.md preview as markdown content", () => {
     renderSkillDetail();
-    expect(screen.getByRole("region", { name: /SKILL\.md 预览/i })).toBeInTheDocument();
+    // Preview is the left column — check for the markdown tabpanel
+    expect(screen.getByRole("tabpanel", { name: /Markdown/i })).toBeInTheDocument();
   });
 
   it("shows Markdown tab button", () => {
@@ -439,7 +416,7 @@ describe("SkillDetail", () => {
 
   // ── Spinner during install/uninstall ──────────────────────────────────────
 
-  it("shows spinner instead of Install button when that agent is installing", () => {
+  it("disables toggle icon when that agent is installing", () => {
     vi.mocked(useSkillDetailStore).mockImplementation((selector?: unknown) => {
       const state = buildDetailStoreState({ installingAgentId: "cursor" });
       if (typeof selector === "function") return selector(state);
@@ -457,8 +434,11 @@ describe("SkillDetail", () => {
         </Routes>
       </MemoryRouter>
     );
-    // The Install button for Cursor should be replaced by a spinner
-    expect(screen.queryByRole("button", { name: /安装到 Cursor/i })).toBeNull();
+    // The toggle icon for Cursor should be disabled
+    const cursorToggle = screen.getByRole("button", {
+      name: /切换 frontend-design 在 Cursor 的链接状态/i,
+    });
+    expect(cursorToggle).toBeDisabled();
   });
 
   // ── CollectionPickerDialog integration ────────────────────────────────────

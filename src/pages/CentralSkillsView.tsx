@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, RefreshCw, PackageOpen, FolderOpen, Settings } from "lucide-react";
+import { Search, RefreshCw, Blocks, FolderOpen, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { usePlatformStore } from "@/stores/platformStore";
-import { CentralSkillCard } from "@/components/central/CentralSkillCard";
+import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ function EmptyState({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-4 py-20">
       <div className="p-4 rounded-full bg-muted/60">
-        <PackageOpen className="size-12 text-muted-foreground opacity-60" />
+        <Blocks className="size-12 text-muted-foreground opacity-60" />
       </div>
       <p className="text-sm text-muted-foreground font-medium">{message}</p>
     </div>
@@ -33,7 +33,7 @@ function FirstVisitEmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-6 py-16 text-center px-8">
       <div className="p-5 rounded-full bg-primary/10 ring-1 ring-primary/20">
-        <PackageOpen className="size-14 text-primary opacity-70" />
+        <Blocks className="size-14 text-primary opacity-70" />
       </div>
       <div className="space-y-2">
         <h2 className="text-xl font-semibold text-foreground">{t("empty.welcomeTitle")}</h2>
@@ -65,6 +65,7 @@ function FirstVisitEmptyState() {
 // ─── CentralSkillsView ────────────────────────────────────────────────────────
 
 export function CentralSkillsView() {
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const skills = useCentralSkillsStore((state) => state.skills);
   const agents = useCentralSkillsStore((state) => state.agents);
@@ -73,6 +74,8 @@ export function CentralSkillsView() {
     (state) => state.loadCentralSkills
   );
   const installSkill = useCentralSkillsStore((state) => state.installSkill);
+  const togglePlatformLink = useCentralSkillsStore((state) => state.togglePlatformLink);
+  const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
 
   // Keep the platform sidebar counts in sync after install.
   const rescan = usePlatformStore((state) => state.rescan);
@@ -101,6 +104,15 @@ export function CentralSkillsView() {
   function handleInstallClick(skill: SkillWithLinks) {
     setInstallTargetSkill(skill);
     setIsDialogOpen(true);
+  }
+
+  async function handleTogglePlatform(skillId: string, agentId: string) {
+    try {
+      await togglePlatformLink(skillId, agentId);
+      await rescan();
+    } catch (err) {
+      toast.error(t("central.installError", { error: String(err) }));
+    }
   }
 
   async function handleInstall(skillId: string, agentIds: string[], method: string) {
@@ -174,11 +186,19 @@ export function CentralSkillsView() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {filteredSkills.map((skill) => (
-              <CentralSkillCard
+              <UnifiedSkillCard
                 key={skill.id}
-                skill={skill}
-                agents={agents}
-                onInstallClick={handleInstallClick}
+                name={skill.name}
+                description={skill.description}
+                onDetail={() => navigate(`/skill/${skill.id}`)}
+                onInstallTo={() => handleInstallClick(skill)}
+                platformIcons={{
+                  agents,
+                  linkedAgents: skill.linked_agents,
+                  skillId: skill.id,
+                  onToggle: handleTogglePlatform,
+                  togglingAgentId,
+                }}
               />
             ))}
           </div>

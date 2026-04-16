@@ -1,4 +1,4 @@
-import { FolderSearch, Loader2, AlertTriangle } from "lucide-react";
+import { Radar, Loader2, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -67,7 +67,7 @@ export function DiscoverConfigDialog({ open, onOpenChange }: DiscoverConfigDialo
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FolderSearch className="size-5" />
+            <Radar className="size-5" />
             {t("discover.title")}
           </DialogTitle>
           <DialogDescription>{t("discover.desc")}</DialogDescription>
@@ -144,7 +144,7 @@ export function DiscoverConfigDialog({ open, onOpenChange }: DiscoverConfigDialo
             onClick={handleStartScan}
             disabled={enabledCount === 0}
           >
-            <FolderSearch className="size-4 mr-1" />
+            <Radar className="size-4 mr-1" />
             {t("discover.startScan")}
           </Button>
         </DialogFooter>

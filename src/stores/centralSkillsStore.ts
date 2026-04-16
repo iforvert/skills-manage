@@ -9,6 +9,8 @@ interface CentralSkillsState {
   agents: AgentWithStatus[];
   isLoading: boolean;
   isInstalling: boolean;
+  /** Agent ID currently being toggled (null = idle). */
+  togglingAgentId: string | null;
   error: string | null;
 
   // Actions
@@ -18,15 +20,17 @@ interface CentralSkillsState {
     agentIds: string[],
     method: string
   ) => Promise<BatchInstallResult>;
+  togglePlatformLink: (skillId: string, agentId: string) => Promise<void>;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-export const useCentralSkillsStore = create<CentralSkillsState>((set) => ({
+export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
   skills: [],
   agents: [],
   isLoading: false,
   isInstalling: false,
+  togglingAgentId: null,
   error: null,
 
   /**
@@ -66,6 +70,31 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set) => ({
       return result;
     } catch (err) {
       set({ error: String(err), isInstalling: false });
+      throw err;
+    }
+  },
+
+  /**
+   * Toggle a single platform link for a skill.
+   * If linked, uninstalls; if not linked, installs via symlink.
+   * Refreshes the skill list afterward so linked_agents updates.
+   */
+  togglePlatformLink: async (skillId, agentId) => {
+    set({ togglingAgentId: agentId, error: null });
+    try {
+      const skill = get().skills.find((s) => s.id === skillId);
+      const isLinked = skill?.linked_agents.includes(agentId) ?? false;
+
+      if (isLinked) {
+        await invoke("uninstall_skill_from_agent", { skillId, agentId });
+      } else {
+        await invoke("install_skill_to_agent", { skillId, agentId, method: "symlink" });
+      }
+
+      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
+      set({ skills, togglingAgentId: null });
+    } catch (err) {
+      set({ error: String(err), togglingAgentId: null });
       throw err;
     }
   },

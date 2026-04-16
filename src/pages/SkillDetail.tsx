@@ -5,9 +5,6 @@ import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import {
   ArrowLeft,
-  Check,
-  Download,
-  Trash2,
   Tag,
   Plus,
   FileText,
@@ -15,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { CollectionPickerDialog } from "@/components/collection/CollectionPickerDialog";
@@ -25,114 +23,53 @@ import { cn } from "@/lib/utils";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80 mb-3">
+    <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80 mb-2">
       {children}
     </div>
   );
 }
 
-// ─── MetadataRow ──────────────────────────────────────────────────────────────
+// ─── MetadataRow (compact) ───────────────────────────────────────────────────
 
 function MetadataRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex gap-3 text-sm">
-      <span className="text-muted-foreground shrink-0 w-24">{label}</span>
-      <span className="font-mono text-xs text-foreground break-all leading-relaxed">
+    <div className="space-y-0.5">
+      <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">{label}</div>
+      <div className="font-mono text-xs text-foreground break-all leading-relaxed">
         {value}
-      </span>
+      </div>
     </div>
   );
 }
 
-// ─── PlatformInstallRow ────────────────────────────────────────────────────────
+// ─── Platform Toggle Icon (compact install/uninstall) ─────────────────────────
 
-interface PlatformInstallRowProps {
+interface PlatformToggleIconProps {
   agent: AgentWithStatus;
-  installation: SkillInstallation | undefined;
-  installingAgentId: string | null;
-  onInstall: (agentId: string) => void;
-  onUninstall: (agentId: string) => void;
+  skillName: string;
+  isInstalled: boolean;
+  isLoading: boolean;
+  onToggle: () => void;
 }
 
-function PlatformInstallRow({
-  agent,
-  installation,
-  installingAgentId,
-  onInstall,
-  onUninstall,
-}: PlatformInstallRowProps) {
+function PlatformToggleIcon({ agent, skillName, isInstalled, isLoading, onToggle }: PlatformToggleIconProps) {
   const { t } = useTranslation();
-  const isInstalled = !!installation;
-  const isLoading = installingAgentId === agent.id;
-
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
-      {/* Status icon */}
-      <div
-        className={cn(
-          "size-5 rounded-full flex items-center justify-center shrink-0",
-          isInstalled
-            ? "bg-primary/15 text-primary"
-            : "bg-muted text-muted-foreground/40"
-        )}
-      >
-        {isInstalled ? (
-          <Check className="size-3" aria-label={t("detail.installed")} />
-        ) : (
-          <span className="size-2 rounded-full bg-current opacity-40" />
-        )}
-      </div>
-
-      {/* Platform name + path + install timestamp */}
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium">{agent.display_name}</div>
-        {isInstalled && installation?.installed_path && (
-          <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
-            {installation.installed_path}
-          </div>
-        )}
-        {isInstalled && installation?.installed_at && (
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {t("detail.installedOn")}{" "}
-            {new Date(installation.installed_at).toLocaleDateString(undefined, {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
-          </div>
-        )}
-        {!isInstalled && (
-          <div className="text-xs text-muted-foreground">{agent.global_skills_dir}</div>
-        )}
-      </div>
-
-      {/* Action button */}
-      {isLoading ? (
-        <Loader2 className="size-4 animate-spin text-muted-foreground" />
-      ) : isInstalled ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onUninstall(agent.id)}
-          aria-label={t("detail.uninstallFrom", { name: agent.display_name })}
-          className="text-muted-foreground hover:text-destructive shrink-0"
-        >
-          <Trash2 className="size-3.5" />
-          <span className="sr-only">{t("detail.uninstallFrom", { name: agent.display_name })}</span>
-        </Button>
-      ) : (
-        <Button
-          variant="default"
-          size="sm"
-          onClick={() => onInstall(agent.id)}
-          aria-label={t("detail.installTo", { name: agent.display_name })}
-          className="shrink-0 gap-1.5"
-        >
-          <Download className="size-3.5" />
-          <span>{t("common.install")}</span>
-        </Button>
+    <button
+      className={cn(
+        "p-1.5 rounded-md transition-colors cursor-pointer",
+        isInstalled
+          ? "text-primary hover:bg-primary/15"
+          : "text-muted-foreground/40 hover:bg-muted/60 hover:text-muted-foreground",
+        isLoading && "animate-pulse pointer-events-none"
       )}
-    </div>
+      title={`${agent.display_name}${isInstalled ? ` — ${t("central.linked")}` : ""}`}
+      aria-label={t("central.toggleInstallLabel", { platform: agent.display_name, skill: skillName })}
+      disabled={isLoading}
+      onClick={onToggle}
+    >
+      <PlatformIcon agentId={agent.id} className="size-4 shrink-0" size={16} />
+    </button>
   );
 }
 
@@ -219,40 +156,36 @@ export function SkillDetail() {
 
   // ── Derived values ───────────────────────────────────────────────────────
 
-  // Exclude the "central" agent from the install status list
   const targetAgents = agents.filter((a) => a.id !== "central");
+  const lobsterAgents = targetAgents.filter((a) => a.category === "lobster");
+  const codingAgents = targetAgents.filter((a) => a.category !== "lobster");
 
-  // Build a map of agentId → installation record for quick lookup
   const installationMap = new Map<string, SkillInstallation>(
     (detail?.installations ?? []).map((inst) => [inst.agent_id, inst])
   );
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
-  async function handleInstall(agentId: string) {
+  async function handleToggle(agentId: string) {
     if (!skillId) return;
+    const isInstalled = installationMap.has(agentId);
     try {
-      await installSkill(skillId, agentId);
-      // Refresh sidebar counts in background
+      if (isInstalled) {
+        await uninstallSkill(skillId, agentId);
+      } else {
+        await installSkill(skillId, agentId);
+      }
       rescan();
     } catch (err) {
-      toast.error(t("detail.installError", { error: String(err) }));
-    }
-  }
-
-  async function handleUninstall(agentId: string) {
-    if (!skillId) return;
-    try {
-      await uninstallSkill(skillId, agentId);
-      // Refresh sidebar counts in background
-      rescan();
-    } catch (err) {
-      toast.error(t("detail.uninstallError", { error: String(err) }));
+      toast.error(
+        isInstalled
+          ? t("detail.uninstallError", { error: String(err) })
+          : t("detail.installError", { error: String(err) })
+      );
     }
   }
 
   function handleCollectionAdded() {
-    // Reload the skill detail to reflect updated collection membership.
     if (skillId) {
       loadDetail(skillId);
     }
@@ -263,7 +196,7 @@ export function SkillDetail() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-b border-border px-6 py-4 flex items-center gap-3 shrink-0">
+      <div className="border-b border-border px-6 py-3 flex items-center gap-3 shrink-0">
         <button
           onClick={() => navigate(-1)}
           className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
@@ -272,19 +205,20 @@ export function SkillDetail() {
           <ArrowLeft className="size-4" />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold truncate">
+          <h1 className="text-lg font-semibold truncate">
             {isLoading ? (skillId ?? "") : (detail?.name ?? skillId ?? "")}
           </h1>
           {detail?.description && (
-            <p className="text-sm text-muted-foreground truncate mt-0.5">
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
               {detail.description}
             </p>
           )}
         </div>
+        <TabToggle activeTab={activeTab} onChange={setActiveTab} />
       </div>
 
       {/* Content area */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {/* Loading state */}
         {isLoading && (
           <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
@@ -309,109 +243,135 @@ export function SkillDetail() {
           </div>
         )}
 
-        {/* Main content */}
+        {/* Two-column layout: Preview (left) + Sidebar (right) */}
         {!isLoading && !error && detail && (
-          <div className="p-6 space-y-8 max-w-3xl">
-            {/* ── Metadata ──────────────────────────────────────────────── */}
-            <section aria-label={t("detail.metadataRegion")}>
-              <SectionLabel>{t("detail.metadata")}</SectionLabel>
-              <div className="space-y-2">
-                <MetadataRow label={t("detail.filePath")} value={detail.file_path} />
-                {detail.canonical_path && (
-                  <MetadataRow label={t("detail.canonical")} value={detail.canonical_path} />
-                )}
-                {detail.source && (
-                  <MetadataRow label={t("detail.source")} value={detail.source} />
-                )}
-                <MetadataRow
-                  label={t("detail.scannedAt")}
-                  value={new Date(detail.scanned_at).toLocaleString()}
-                />
-              </div>
-            </section>
-
-            {/* ── Installation Status ────────────────────────────────────── */}
-            <section aria-label={t("detail.installStatusRegion")}>
-              <SectionLabel>{t("detail.installStatus")}</SectionLabel>
-              <div className="rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden px-4 py-1">
-                {targetAgents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-3">
-                    {t("detail.noPlatforms")}
-                  </p>
-                ) : (
-                  targetAgents.map((agent: AgentWithStatus) => (
-                    <PlatformInstallRow
-                      key={agent.id}
-                      agent={agent}
-                      installation={installationMap.get(agent.id)}
-                      installingAgentId={installingAgentId}
-                      onInstall={handleInstall}
-                      onUninstall={handleUninstall}
-                    />
-                  ))
-                )}
-              </div>
-            </section>
-
-            {/* ── Collections ────────────────────────────────────────────── */}
-            <section aria-label={t("detail.collections")}>
-              <SectionLabel>{t("detail.collections")}</SectionLabel>
-              <div className="flex flex-wrap gap-2 items-center">
-                {(detail.collections ?? []).map((collectionId) => (
-                  <span
-                    key={collectionId}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary ring-1 ring-primary/20"
-                  >
-                    <Tag className="size-3" />
-                    {collectionId}
-                  </span>
-                ))}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 text-muted-foreground hover:text-foreground"
-                  aria-label={t("detail.addToCollection")}
-                  onClick={() => setIsCollectionPickerOpen(true)}
+          <div className="flex h-full">
+            {/* ── Left: SKILL.md Preview ─────────────────────────────── */}
+            <div className="flex-1 min-w-0 overflow-auto">
+              {activeTab === "markdown" ? (
+                <div
+                  className="markdown-body p-6"
+                  role="tabpanel"
+                  aria-label={t("detail.markdown")}
                 >
-                  <Plus className="size-3.5" />
-                  {t("detail.addToCollection")}
-                </Button>
-              </div>
-            </section>
+                  {content ? (
+                    <ReactMarkdown>{content}</ReactMarkdown>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">
+                      {t("detail.noContent")}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <pre
+                  className="p-6 text-xs font-mono whitespace-pre-wrap break-words text-foreground/80"
+                  role="tabpanel"
+                  aria-label={t("detail.rawSource")}
+                >
+                  {content ?? t("detail.noContent")}
+                </pre>
+              )}
+            </div>
 
-            {/* ── SKILL.md Preview ───────────────────────────────────────── */}
-            <section aria-label={t("detail.preview")}>
-              <div className="flex items-center justify-between mb-3">
-                <SectionLabel>{t("detail.preview")}</SectionLabel>
-                <TabToggle activeTab={activeTab} onChange={setActiveTab} />
-              </div>
+            {/* ── Right: Sidebar ─────────────────────────────────────── */}
+            <aside className="w-64 shrink-0 border-l border-border overflow-y-auto p-4 space-y-5">
+              {/* Metadata */}
+              <section aria-label={t("detail.metadataRegion")}>
+                <SectionLabel>{t("detail.metadata")}</SectionLabel>
+                <div className="space-y-2.5">
+                  <MetadataRow label={t("detail.filePath")} value={detail.file_path} />
+                  {detail.canonical_path && (
+                    <MetadataRow label={t("detail.canonical")} value={detail.canonical_path} />
+                  )}
+                  {detail.source && (
+                    <MetadataRow label={t("detail.source")} value={detail.source} />
+                  )}
+                  <MetadataRow
+                    label={t("detail.scannedAt")}
+                    value={new Date(detail.scanned_at).toLocaleString()}
+                  />
+                </div>
+              </section>
 
-              <div className="rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden">
-                {activeTab === "markdown" ? (
-                  <div
-                    className="markdown-body p-4 overflow-auto max-h-[60vh]"
-                    role="tabpanel"
-                    aria-label={t("detail.markdown")}
+              {/* Install Status — compact icon grid */}
+              <section aria-label={t("detail.installStatusRegion")}>
+                <SectionLabel>{t("detail.installStatus")}</SectionLabel>
+                <div className="space-y-1.5">
+                  {targetAgents.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t("detail.noPlatforms")}
+                    </p>
+                  ) : (
+                    <>
+                      {lobsterAgents.length > 0 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-12 shrink-0">
+                            {t("sidebar.categoryLobster")}
+                          </span>
+                          <div className="flex items-center gap-0.5 flex-wrap">
+                            {lobsterAgents.map((agent) => (
+                              <PlatformToggleIcon
+                                key={agent.id}
+                                agent={agent}
+                                skillName={detail.name}
+                                isInstalled={installationMap.has(agent.id)}
+                                isLoading={installingAgentId === agent.id}
+                                onToggle={() => handleToggle(agent.id)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {codingAgents.length > 0 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-12 shrink-0">
+                            {t("sidebar.categoryCoding")}
+                          </span>
+                          <div className="flex items-center gap-0.5 flex-wrap">
+                            {codingAgents.map((agent) => (
+                              <PlatformToggleIcon
+                                key={agent.id}
+                                agent={agent}
+                                skillName={detail.name}
+                                isInstalled={installationMap.has(agent.id)}
+                                isLoading={installingAgentId === agent.id}
+                                onToggle={() => handleToggle(agent.id)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </section>
+
+              {/* Collections */}
+              <section aria-label={t("detail.collections")}>
+                <SectionLabel>{t("detail.collections")}</SectionLabel>
+                <div className="flex flex-wrap gap-1.5 items-center">
+                  {(detail.collections ?? []).map((collectionId) => (
+                    <span
+                      key={collectionId}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary ring-1 ring-primary/20"
+                    >
+                      <Tag className="size-2.5" />
+                      {collectionId}
+                    </span>
+                  ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 text-muted-foreground hover:text-foreground h-6 px-2 text-xs"
+                    aria-label={t("detail.addToCollection")}
+                    onClick={() => setIsCollectionPickerOpen(true)}
                   >
-                    {content ? (
-                      <ReactMarkdown>{content}</ReactMarkdown>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">
-                        {t("detail.noContent")}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <pre
-                    className="p-4 text-xs font-mono overflow-auto max-h-[60vh] whitespace-pre-wrap break-words text-foreground/80"
-                    role="tabpanel"
-                    aria-label={t("detail.rawSource")}
-                  >
-                    {content ?? t("detail.noContent")}
-                  </pre>
-                )}
-              </div>
-            </section>
+                    <Plus className="size-3" />
+                    {t("detail.addToCollection")}
+                  </Button>
+                </div>
+              </section>
+            </aside>
           </div>
         )}
       </div>

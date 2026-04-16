@@ -93,7 +93,7 @@ export function CollectionInstallDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("batchInstall.title", { name: collectionName })}</DialogTitle>
           <DialogClose />
@@ -105,16 +105,16 @@ export function CollectionInstallDialog({
           </DialogDescription>
 
           {/* Platform checkboxes */}
-          <div className="space-y-2.5" role="group" aria-label={t("batchInstall.selectPlatforms")}>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2" role="group" aria-label={t("batchInstall.selectPlatforms")}>
             {targetAgents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="col-span-2 text-sm text-muted-foreground">
                 {t("batchInstall.noPlatforms")}
               </p>
             ) : (
               targetAgents.map((agent) => {
                 const isChecked = selectedAgentIds.has(agent.id);
                 return (
-                  <div key={agent.id} className="flex items-center gap-2.5">
+                  <div key={agent.id} className="flex items-center gap-2">
                     <Checkbox
                       checked={isChecked}
                       onCheckedChange={(checked) =>
@@ -123,13 +123,13 @@ export function CollectionInstallDialog({
                       aria-label={agent.display_name}
                     />
                     <span
-                      className="text-sm text-foreground flex-1 cursor-pointer select-none"
+                      className="text-sm text-foreground flex-1 cursor-pointer select-none truncate"
                       onClick={() => handleToggle(agent.id, !isChecked)}
                     >
                       {agent.display_name}
                     </span>
                     {!agent.is_detected && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground shrink-0">
                         {t("batchInstall.notDetected")}
                       </span>
                     )}

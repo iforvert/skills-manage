@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
-import { Search, PackageOpen } from "lucide-react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Search, Blocks } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { Input } from "@/components/ui/input";
-import { SkillCard } from "@/components/platform/SkillCard";
+import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ function EmptyState({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-4 py-20">
       <div className="p-4 rounded-full bg-muted/60">
-        <PackageOpen className="size-12 text-muted-foreground opacity-60" />
+        <Blocks className="size-12 text-muted-foreground opacity-60" />
       </div>
       <p className="text-sm text-muted-foreground font-medium">{message}</p>
     </div>
@@ -25,6 +25,7 @@ function EmptyState({ message }: { message: string }) {
 
 export function PlatformView() {
   const { agentId } = useParams<{ agentId: string }>();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const agents = usePlatformStore((state) => state.agents);
 
@@ -110,7 +111,13 @@ export function PlatformView() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {filteredSkills.map((skill) => (
-              <SkillCard key={skill.id} skill={skill} />
+              <UnifiedSkillCard
+                key={skill.id}
+                name={skill.name}
+                description={skill.description}
+                sourceType={skill.link_type as "symlink" | "copy"}
+                onClick={() => navigate(`/skill/${skill.id}`)}
+              />
             ))}
           </div>
         )}

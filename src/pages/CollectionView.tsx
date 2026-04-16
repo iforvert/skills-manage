@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -7,51 +7,19 @@ import {
   Trash2,
   Download,
   PackagePlus,
-  X,
   Plus,
   Loader2,
   BookOpen,
+  FileInput,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { CollectionEditor } from "@/components/collection/CollectionEditor";
 import { SkillPickerDialog } from "@/components/collection/SkillPickerDialog";
 import { CollectionInstallDialog } from "@/components/collection/CollectionInstallDialog";
-import { Skill } from "@/types";
-
-// ─── SkillRow ─────────────────────────────────────────────────────────────────
-
-interface SkillRowProps {
-  skill: Skill;
-  collectionId: string;
-  onRemove: () => void;
-}
-
-function SkillRow({ skill, onRemove }: SkillRowProps) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex items-center gap-3 py-2.5 px-4 border-b border-border/50 last:border-0 hover:bg-hover-bg/15 transition-colors group cursor-pointer">
-      <BookOpen className="size-4 text-muted-foreground shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium truncate">{skill.name}</div>
-        {skill.description && (
-          <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-            {skill.description}
-          </div>
-        )}
-      </div>
-      <button
-        onClick={onRemove}
-        aria-label={t("collection.removeSkillLabel", { name: skill.name })}
-        className="shrink-0 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-      >
-        <X className="size-3.5" />
-      </button>
-    </div>
-  );
-}
 
 // ─── CollectionView ───────────────────────────────────────────────────────────
 
@@ -72,12 +40,30 @@ export function CollectionView() {
 
   const agents = usePlatformStore((s) => s.agents);
 
+  const importCollection = useCollectionStore((s) => s.importCollection);
+
   // Dialog open states.
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isNewEditorOpen, setIsNewEditorOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isInstallOpen, setIsInstallOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const collection = await importCollection(text);
+      navigate(`/collection/${collection.id}`);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  }
 
   // Load collection detail on mount and when collectionId changes.
   useEffect(() => {
@@ -193,6 +179,23 @@ export function CollectionView() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setIsNewEditorOpen(true)}
+            >
+              <Plus className="size-3.5" />
+              <span>{t("sidebar.newCollectionLabel")}</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => importInputRef.current?.click()}
+            >
+              <FileInput className="size-3.5" />
+              <span>{t("sidebar.importCollection")}</span>
+            </Button>
+            <div className="w-px h-5 bg-border" />
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setIsEditorOpen(true)}
               aria-label={t("collection.editLabel")}
             >
@@ -284,10 +287,10 @@ export function CollectionView() {
         ) : (
           <div className="mx-6 my-3 rounded-lg border border-border overflow-hidden">
             {currentDetail.skills.map((skill) => (
-              <SkillRow
+              <UnifiedSkillCard
                 key={skill.id}
-                skill={skill}
-                collectionId={currentDetail.id}
+                name={skill.name}
+                description={skill.description}
                 onRemove={() => handleRemoveSkill(skill.id)}
               />
             ))}
@@ -313,6 +316,20 @@ export function CollectionView() {
         onOpenChange={setIsPickerOpen}
         existingSkillIds={currentDetail.skills.map((s) => s.id)}
         onAdd={handleAddSkills}
+      />
+
+      <CollectionEditor
+        open={isNewEditorOpen}
+        onOpenChange={setIsNewEditorOpen}
+        collection={null}
+      />
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".json"
+        className="hidden"
+        onChange={handleImportFile}
       />
 
       <CollectionInstallDialog

@@ -107,6 +107,8 @@ fn default_scan_roots() -> Vec<ScanRoot> {
         (format!("{}/code", home), "code"),
         (format!("{}/repos", home), "repos"),
         (format!("{}/Desktop", home), "Desktop"),
+        // macOS: scan /Applications for apps with built-in skills (e.g. OpenClaw)
+        ("/Applications".to_string(), "Applications"),
     ];
 
     candidates

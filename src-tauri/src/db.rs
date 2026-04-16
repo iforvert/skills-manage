@@ -254,24 +254,68 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    // skill_registries table — remote skill sources (marketplace)
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_registries (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            url         TEXT NOT NULL,
+            is_builtin  BOOLEAN NOT NULL DEFAULT 0,
+            is_enabled  BOOLEAN NOT NULL DEFAULT 1,
+            last_synced TEXT,
+            created_at  TEXT NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // marketplace_skills table — cached remote skill metadata
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS marketplace_skills (
+            id           TEXT PRIMARY KEY,
+            registry_id  TEXT NOT NULL,
+            name         TEXT NOT NULL,
+            description  TEXT,
+            download_url TEXT NOT NULL,
+            is_installed BOOLEAN NOT NULL DEFAULT 0,
+            synced_at    TEXT NOT NULL,
+            FOREIGN KEY (registry_id) REFERENCES skill_registries(id)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     // Seed built-in agents (INSERT OR IGNORE so repeated init is safe)
     seed_builtin_agents(pool).await?;
 
     // Seed built-in scan directories from the built-in agent registry.
-    // Uses INSERT OR IGNORE so repeated init is idempotent even when
-    // two agents share the same global_skills_dir (e.g. codex + central).
     seed_builtin_scan_directories(pool).await?;
+
+    // Seed built-in skill registries (marketplace sources)
+    seed_builtin_registries(pool).await?;
 
     Ok(())
 }
 
 async fn seed_builtin_agents(pool: &DbPool) -> Result<(), String> {
-    for agent in builtin_agents() {
+    let agents = builtin_agents();
+    let builtin_ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
+
+    for agent in &agents {
         sqlx::query(
-            "INSERT OR IGNORE INTO agents
+            "INSERT INTO agents
              (id, display_name, category, global_skills_dir, project_skills_dir,
               icon_name, is_detected, is_builtin, is_enabled)
-             VALUES (?, ?, ?, ?, ?, ?, 0, 1, 1)",
+             VALUES (?, ?, ?, ?, ?, ?, 0, 1, 1)
+             ON CONFLICT(id) DO UPDATE SET
+              display_name = excluded.display_name,
+              category = excluded.category,
+              global_skills_dir = excluded.global_skills_dir,
+              project_skills_dir = excluded.project_skills_dir,
+              icon_name = excluded.icon_name",
         )
         .bind(&agent.id)
         .bind(&agent.display_name)
@@ -283,6 +327,24 @@ async fn seed_builtin_agents(pool: &DbPool) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
     }
+
+    // Remove builtin agents that no longer exist in code
+    let all_db_agents: Vec<(String,)> =
+        sqlx::query_as("SELECT id FROM agents WHERE is_builtin = 1")
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    for (id,) in &all_db_agents {
+        if !builtin_ids.contains(&id.as_str()) {
+            sqlx::query("DELETE FROM agents WHERE id = ? AND is_builtin = 1")
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
     Ok(())
 }
 
@@ -301,6 +363,50 @@ async fn seed_builtin_scan_directories(pool: &DbPool) -> Result<(), String> {
         )
         .bind(&agent.global_skills_dir)
         .bind(&agent.display_name)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    // Remove builtin scan directories that no longer exist in code
+    let builtin_paths: std::collections::HashSet<String> =
+        builtin_agents().into_iter().map(|a| a.global_skills_dir).collect();
+    let all_db_dirs: Vec<(String,)> =
+        sqlx::query_as("SELECT path FROM scan_directories WHERE is_builtin = 1")
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    for (path,) in &all_db_dirs {
+        if !builtin_paths.contains(path) {
+            sqlx::query("DELETE FROM scan_directories WHERE path = ? AND is_builtin = 1")
+                .bind(path)
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn seed_builtin_registries(pool: &DbPool) -> Result<(), String> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let registries = vec![
+        ("anthropic", "Anthropic", "github", "https://github.com/anthropics/skills"),
+        ("openai", "OpenAI", "github", "https://github.com/openai/skills"),
+        ("baoyu-skills", "baoyu-skills", "github", "https://github.com/jimliu/baoyu-skills"),
+    ];
+    for (id, name, source_type, url) in registries {
+        sqlx::query(
+            "INSERT OR IGNORE INTO skill_registries
+             (id, name, source_type, url, is_builtin, is_enabled, created_at)
+             VALUES (?, ?, ?, ?, 1, 1, ?)",
+        )
+        .bind(id)
+        .bind(name)
+        .bind(source_type)
+        .bind(url)
         .bind(&now)
         .execute(pool)
         .await
@@ -515,7 +621,7 @@ pub fn builtin_agents() -> Vec<Agent> {
         Agent {
             id: "hermes".to_string(),
             display_name: "Hermes".to_string(),
-            category: "coding".to_string(),
+            category: "lobster".to_string(),
             global_skills_dir: format!("{}/.hermes/skills", home),
             project_skills_dir: None,
             icon_name: Some("hermes".to_string()),
@@ -573,17 +679,6 @@ pub fn builtin_agents() -> Vec<Agent> {
             display_name: "EasyClaw".to_string(),
             category: "lobster".to_string(),
             global_skills_dir: format!("{}/.easyclaw/skills", home),
-            project_skills_dir: None,
-            icon_name: Some("easyclaw".to_string()),
-            is_detected: false,
-            is_builtin: true,
-            is_enabled: true,
-        },
-        Agent {
-            id: "easyclaw-v2".to_string(),
-            display_name: "EasyClaw V2".to_string(),
-            category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.easyclaw-20260322-01/skills", home),
             project_skills_dir: None,
             icon_name: Some("easyclaw".to_string()),
             is_detected: false,
@@ -1414,7 +1509,7 @@ mod tests {
     async fn test_builtin_agents_seeded() {
         let pool = setup_test_db().await;
         let agents = get_all_agents(&pool).await.unwrap();
-        assert_eq!(agents.len(), 28, "Should have exactly 28 built-in agents");
+        assert_eq!(agents.len(), 27, "Should have exactly 27 built-in agents");
 
         let ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
         // Coding platforms
@@ -1443,7 +1538,6 @@ mod tests {
         assert!(ids.contains(&"openclaw"));
         assert!(ids.contains(&"qclaw"));
         assert!(ids.contains(&"easyclaw"));
-        assert!(ids.contains(&"easyclaw-v2"));
         assert!(ids.contains(&"autoclaw"));
         assert!(ids.contains(&"workbuddy"));
         // Central
@@ -1464,7 +1558,7 @@ mod tests {
         let pool = setup_test_db().await;
         init_database(&pool).await.unwrap(); // Call a second time
         let agents = get_all_agents(&pool).await.unwrap();
-        assert_eq!(agents.len(), 28, "Reinit must not duplicate agents");
+        assert_eq!(agents.len(), 27, "Reinit must not duplicate agents");
     }
 
     // ── Skills ────────────────────────────────────────────────────────────────
@@ -1671,7 +1765,7 @@ mod tests {
         insert_custom_agent(&pool, &custom).await.unwrap();
 
         let all = get_all_agents(&pool).await.unwrap();
-        assert_eq!(all.len(), 29, "Should have 28 builtins + 1 custom");
+        assert_eq!(all.len(), 28, "Should have 27 builtins + 1 custom");
 
         let retrieved = get_agent_by_id(&pool, "my-custom-agent")
             .await

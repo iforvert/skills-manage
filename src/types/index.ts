@@ -185,3 +185,26 @@ export interface DiscoverImportResult {
   skill_id: string;
   target: string;
 }
+
+// ─── Marketplace Types ───────────────────────────────────────────────────────
+
+export interface SkillRegistry {
+  id: string;
+  name: string;
+  source_type: "github" | "http_json";
+  url: string;
+  is_builtin: boolean;
+  is_enabled: boolean;
+  last_synced: string | null;
+  created_at: string;
+}
+
+export interface MarketplaceSkill {
+  id: string;
+  registry_id: string;
+  name: string;
+  description?: string;
+  download_url: string;
+  is_installed: boolean;
+  synced_at: string;
+}

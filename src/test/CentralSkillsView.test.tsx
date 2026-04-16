@@ -73,6 +73,7 @@ const mockSkills: SkillWithLinks[] = [
 
 const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
+const mockTogglePlatformLink = vi.fn();
 const mockRescan = vi.fn();
 
 function buildCentralStoreState(overrides = {}) {
@@ -81,9 +82,11 @@ function buildCentralStoreState(overrides = {}) {
     agents: mockAgents,
     isLoading: false,
     isInstalling: false,
+    togglingAgentId: null,
     error: null,
     loadCentralSkills: mockLoadCentralSkills,
     installSkill: mockInstallSkill,
+    togglePlatformLink: mockTogglePlatformLink,
     ...overrides,
   };
 }
@@ -193,11 +196,13 @@ describe("CentralSkillsView", () => {
 
   // ── Per-platform link status ──────────────────────────────────────────────
 
-  it("shows link status icons for each non-central agent", () => {
+  it("shows platform toggle icons for each non-central agent", () => {
     renderCentralSkillsView();
-    // "Claude Code" label should appear for both skills
-    const claudeLabels = screen.getAllByText("Claude Code");
-    expect(claudeLabels.length).toBeGreaterThanOrEqual(2);
+    // Each skill card should have a toggle button for each non-central agent (2 agents x 2 skills = 4)
+    const toggleButtons = screen.getAllByRole("button", {
+      name: /切换 .* 的链接状态/i,
+    });
+    expect(toggleButtons.length).toBe(4);
   });
 
   // ── Empty State ───────────────────────────────────────────────────────────

@@ -73,6 +73,7 @@ describe("centralSkillsStore", () => {
       agents: [],
       isLoading: false,
       isInstalling: false,
+      togglingAgentId: null,
       error: null,
     });
     vi.clearAllMocks();
@@ -86,6 +87,7 @@ describe("centralSkillsStore", () => {
     expect(state.agents).toEqual([]);
     expect(state.isLoading).toBe(false);
     expect(state.isInstalling).toBe(false);
+    expect(state.togglingAgentId).toBeNull();
     expect(state.error).toBeNull();
   });
 
@@ -198,5 +200,76 @@ describe("centralSkillsStore", () => {
     const state = useCentralSkillsStore.getState();
     expect(state.error).toContain("symlink failed");
     expect(state.isInstalling).toBe(false);
+  });
+
+  // ── togglePlatformLink ────────────────────────────────────────────────────
+
+  it("calls uninstall when skill is already linked to the agent", async () => {
+    // Pre-populate skills so the toggle can check linked_agents
+    useCentralSkillsStore.setState({ skills: mockSkills });
+
+    const updatedSkills = [
+      { ...mockSkills[0], linked_agents: ["claude-code"] }, // cursor removed
+      mockSkills[1],
+    ];
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(undefined) // uninstall_skill_from_agent
+      .mockResolvedValueOnce(updatedSkills); // get_central_skills (refresh)
+
+    await useCentralSkillsStore
+      .getState()
+      .togglePlatformLink("frontend-design", "cursor");
+
+    expect(invoke).toHaveBeenCalledWith("uninstall_skill_from_agent", {
+      skillId: "frontend-design",
+      agentId: "cursor",
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+
+    const state = useCentralSkillsStore.getState();
+    expect(state.skills).toEqual(updatedSkills);
+    expect(state.togglingAgentId).toBeNull();
+  });
+
+  it("calls install when skill is not linked to the agent", async () => {
+    useCentralSkillsStore.setState({ skills: mockSkills });
+
+    const updatedSkills = [
+      mockSkills[0],
+      { ...mockSkills[1], linked_agents: ["claude-code"] }, // added
+    ];
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(undefined) // install_skill_to_agent
+      .mockResolvedValueOnce(updatedSkills); // get_central_skills (refresh)
+
+    await useCentralSkillsStore
+      .getState()
+      .togglePlatformLink("code-reviewer", "claude-code");
+
+    expect(invoke).toHaveBeenCalledWith("install_skill_to_agent", {
+      skillId: "code-reviewer",
+      agentId: "claude-code",
+      method: "symlink",
+    });
+
+    const state = useCentralSkillsStore.getState();
+    expect(state.skills).toEqual(updatedSkills);
+    expect(state.togglingAgentId).toBeNull();
+  });
+
+  it("sets error and re-throws when togglePlatformLink fails", async () => {
+    useCentralSkillsStore.setState({ skills: mockSkills });
+
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("toggle failed"));
+
+    await expect(
+      useCentralSkillsStore
+        .getState()
+        .togglePlatformLink("frontend-design", "cursor")
+    ).rejects.toThrow("toggle failed");
+
+    const state = useCentralSkillsStore.getState();
+    expect(state.error).toContain("toggle failed");
+    expect(state.togglingAgentId).toBeNull();
   });
 });

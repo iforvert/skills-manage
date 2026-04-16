@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { DiscoverView } from "../pages/DiscoverView";
 import { DiscoveredProject, DiscoveredSkill, AgentWithStatus } from "../types";
 
@@ -27,11 +27,6 @@ vi.mock("react-i18next", () => ({
         "discover.foundSummary": `${params?.skills ?? 0} skills across ${params?.projects ?? 0} projects`,
         "discover.reScan": "Re-scan",
         "discover.searchPlaceholder": "Search discovered skills...",
-        "discover.groupBy": "Group by",
-        "discover.groupByProject": "Project",
-        "discover.groupByPlatform": "Platform",
-        "discover.groupBySkill": "Skill",
-        "discover.filterAll": "All platforms",
         "discover.scanning": "Scanning...",
         "discover.progress": `${params?.percent ?? 0}% — scanning ${params?.path ?? ""}`,
         "discover.foundSoFar": `${params?.skills ?? 0} skills in ${params?.projects ?? 0} projects`,
@@ -46,17 +41,9 @@ vi.mock("react-i18next", () => ({
         "discover.installSelectedCentral": "Install selected to Central",
         "discover.deselectAll": "Deselect all",
         "discover.selectSkill": "Select skill",
-        "discover.title": "Discover Project Skills",
-        "discover.desc": "Scan your project directories for skills not yet managed.",
-        "discover.scanRoots": "Scan Roots",
-        "discover.scanRootsDesc": "Select directories to scan for project-level skills.",
-        "discover.lookingFor": "Looking for:",
-        "discover.noRootsEnabled": "No scan roots enabled. Select at least one directory.",
-        "discover.startScan": "Start Scan",
-        "common.cancel": "Cancel",
-        "common.loading": "Loading...",
         "discover.importSuccess": "Skill imported successfully",
         "discover.importError": "Import failed",
+        "collection.skills": `Skills (${params?.count ?? 0})`,
       };
       return map[key] ?? key;
     },
@@ -135,9 +122,6 @@ const mockImportToCentral = vi.fn();
 const mockImportToPlatform = vi.fn();
 const mockToggleSkillSelection = vi.fn();
 const mockClearSelection = vi.fn();
-const mockSetGroupBy = vi.fn();
-const mockSetPlatformFilter = vi.fn();
-const mockSetSearchQuery = vi.fn();
 const mockRescan = vi.fn();
 const mockStopScan = vi.fn();
 
@@ -161,9 +145,9 @@ function buildDiscoverStoreState(overrides = {}) {
     importToPlatform: mockImportToPlatform,
     toggleSkillSelection: mockToggleSkillSelection,
     clearSelection: mockClearSelection,
-    setGroupBy: mockSetGroupBy,
-    setPlatformFilter: mockSetPlatformFilter,
-    setSearchQuery: mockSetSearchQuery,
+    setGroupBy: vi.fn(),
+    setPlatformFilter: vi.fn(),
+    setSearchQuery: vi.fn(),
     loadScanRoots: mockLoadScanRoots,
     startScan: vi.fn(),
     stopScan: mockStopScan,
@@ -185,11 +169,14 @@ function buildPlatformStoreState(overrides = {}) {
   };
 }
 
-// Helper to render with router
-function renderDiscoverView() {
+// Render with routing that matches App.tsx routes
+function renderDiscoverView(initialPath = "/discover") {
   return render(
-    <MemoryRouter initialEntries={["/discover"]}>
-      <DiscoverView />
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route path="/discover" element={<DiscoverView />} />
+        <Route path="/discover/:projectPath" element={<DiscoverView />} />
+      </Routes>
     </MemoryRouter>
   );
 }
@@ -226,16 +213,10 @@ describe("DiscoverView", () => {
     expect(screen.getByText("Re-scan")).toBeInTheDocument();
   });
 
-  it("renders the search input", () => {
+  it("renders project list in left panel", () => {
     renderDiscoverView();
-    expect(screen.getByPlaceholderText("Search discovered skills...")).toBeInTheDocument();
-  });
-
-  it("renders group-by buttons", () => {
-    renderDiscoverView();
-    expect(screen.getByText("Project")).toBeInTheDocument();
-    expect(screen.getByText("Platform")).toBeInTheDocument();
-    expect(screen.getByText("Skill")).toBeInTheDocument();
+    // "my-app" appears in both the project list and the detail header
+    expect(screen.getAllByText("my-app").length).toBeGreaterThanOrEqual(1);
   });
 
   // ── Loading cached results on mount ──────────────────────────────────────
@@ -291,34 +272,18 @@ describe("DiscoverView", () => {
     });
   });
 
-  // ── Search ─────────────────────────────────────────────────────────────────
+  // ── Skill cards (with project selected via route) ─────────────────────────
 
-  it("calls setSearchQuery when typing in search", () => {
-    renderDiscoverView();
-    const input = screen.getByPlaceholderText("Search discovered skills...");
-    fireEvent.change(input, { target: { value: "deploy" } });
-    expect(mockSetSearchQuery).toHaveBeenCalledWith("deploy");
-  });
-
-  // ── Group by ───────────────────────────────────────────────────────────────
-
-  it("calls setGroupBy when clicking group buttons", () => {
-    renderDiscoverView();
-    const platformBtn = screen.getByText("Platform");
-    fireEvent.click(platformBtn);
-    expect(mockSetGroupBy).toHaveBeenCalledWith("platform");
-  });
-
-  // ── Skill cards ─────────────────────────────────────────────────────────────
-
-  it("renders discovered skill cards with names", () => {
-    renderDiscoverView();
+  it("renders discovered skill cards when project is selected", () => {
+    const encoded = encodeURIComponent("/home/user/projects/my-app");
+    renderDiscoverView(`/discover/${encoded}`);
     expect(screen.getByText("deploy")).toBeInTheDocument();
     expect(screen.getByText("review")).toBeInTheDocument();
   });
 
   it("shows 'Already in Central' badge for already-central skills", () => {
-    renderDiscoverView();
+    const encoded = encodeURIComponent("/home/user/projects/my-app");
+    renderDiscoverView(`/discover/${encoded}`);
     expect(screen.getByText("Already in Central")).toBeInTheDocument();
   });
 
@@ -332,7 +297,8 @@ describe("DiscoverView", () => {
       }))
     );
 
-    renderDiscoverView();
+    const encoded = encodeURIComponent("/home/user/projects/my-app");
+    renderDiscoverView(`/discover/${encoded}`);
     expect(screen.getByText("1 selected")).toBeInTheDocument();
     expect(screen.getByText("Install selected to Central")).toBeInTheDocument();
     expect(screen.getByText("Deselect all")).toBeInTheDocument();
@@ -344,7 +310,8 @@ describe("DiscoverView", () => {
     mockImportToCentral.mockResolvedValueOnce({ skill_id: "deploy", target: "central" });
     mockRescan.mockResolvedValueOnce(undefined);
 
-    renderDiscoverView();
+    const encoded = encodeURIComponent("/home/user/projects/my-app");
+    renderDiscoverView(`/discover/${encoded}`);
 
     const installBtn = screen.getAllByText("Install to Central")[0];
     fireEvent.click(installBtn);

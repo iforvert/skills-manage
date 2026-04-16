@@ -56,10 +56,10 @@ export function InstallDialog({
   // user can see the full picture, but they can deselect any.
   useEffect(() => {
     if (open && skill) {
-      // Default: select all agents that are NOT yet linked.
+      // Default: check agents that are already linked (show current state).
       const initialSelection = new Set<string>(
         targetAgents
-          .filter((a) => !skill.linked_agents.includes(a.id))
+          .filter((a) => skill.linked_agents.includes(a.id))
           .map((a) => a.id)
       );
       setSelectedAgentIds(initialSelection);
@@ -106,7 +106,7 @@ export function InstallDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("installDialog.title", { name: skill.name })}</DialogTitle>
           <DialogClose />
@@ -118,9 +118,9 @@ export function InstallDialog({
           </DialogDescription>
 
           {/* Platform checkboxes */}
-          <div className="space-y-2.5" role="group" aria-label={t("installDialog.selectPlatforms")}>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2" role="group" aria-label={t("installDialog.selectPlatforms")}>
             {targetAgents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="col-span-2 text-sm text-muted-foreground">
                 {t("installDialog.noPlatforms")}
               </p>
             ) : (
@@ -131,7 +131,7 @@ export function InstallDialog({
                 return (
                   <div
                     key={agent.id}
-                    className="flex items-center gap-2.5"
+                    className="flex items-center gap-2"
                   >
                     <Checkbox
                       checked={isChecked}
@@ -140,9 +140,8 @@ export function InstallDialog({
                       }
                       aria-label={agent.display_name}
                     />
-                    {/* Clicking the text also toggles the checkbox */}
                     <span
-                      className="text-sm text-foreground flex-1 cursor-pointer select-none"
+                      className="text-sm text-foreground flex-1 cursor-pointer select-none truncate"
                       onClick={() =>
                         handleCheckboxChange(agent.id, !isChecked)
                       }
@@ -150,12 +149,12 @@ export function InstallDialog({
                       {agent.display_name}
                     </span>
                     {isLinked && (
-                      <span className="text-xs text-primary">
+                      <span className="text-xs text-primary shrink-0">
                         {t("installDialog.alreadyLinked")}
                       </span>
                     )}
                     {!agent.is_detected && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground shrink-0">
                         {t("installDialog.notDetected")}
                       </span>
                     )}

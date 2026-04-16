@@ -85,6 +85,7 @@ const defaultCollectionState = {
 
 const defaultDiscoverState = {
   totalSkillsFound: 0,
+  discoveredProjects: [],
   loadDiscoveredSkills: vi.fn(),
 };
 
@@ -112,10 +113,10 @@ describe("Sidebar", () => {
 
   // ── Rendering ─────────────────────────────────────────────────────────────
 
-  it("renders icon-only sidebar with fixed width", () => {
+  it("renders expanded sidebar by default", () => {
     const { container } = renderSidebar();
     const nav = container.querySelector("nav");
-    expect(nav?.className).toContain("w-14");
+    expect(nav?.className).toContain("w-52");
   });
 
   it("renders platform agents as icon buttons", () => {
@@ -136,14 +137,10 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: "技能集" })).toBeInTheDocument();
   });
 
-  it("renders new collection button", () => {
+  it("new/import collection buttons are on the list page, not sidebar", () => {
     renderSidebar();
-    expect(screen.getByRole("button", { name: /新建技能集/ })).toBeInTheDocument();
-  });
-
-  it("renders import collection button", () => {
-    renderSidebar();
-    expect(screen.getByRole("button", { name: /导入技能集/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /新建技能集/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /导入技能集/i })).not.toBeInTheDocument();
   });
 
   it("does not render Settings (moved to TopBar)", () => {
@@ -152,7 +149,7 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("button", { name: /设置/ })).not.toBeInTheDocument();
   });
 
-  it("does not render text labels or section headers", () => {
+  it("does not render legacy section headers", () => {
     renderSidebar();
     // No "By Tool" header
     expect(screen.queryByText("按工具")).not.toBeInTheDocument();
@@ -254,7 +251,7 @@ describe("Sidebar", () => {
 
   // ── Collections ───────────────────────────────────────────────────────────
 
-  it("collections button navigates to first collection when collections exist", () => {
+  it("collections button navigates to /collections list page", () => {
     vi.mocked(useCollectionStore).mockImplementation((selector) =>
       selector({
         ...defaultCollectionState,
@@ -265,7 +262,6 @@ describe("Sidebar", () => {
       })
     );
     renderSidebar();
-    // The collections icon button should be present (exact match to avoid "导入技能集")
     expect(screen.getByRole("button", { name: "技能集" })).toBeInTheDocument();
   });
 
@@ -300,6 +296,7 @@ describe("Sidebar", () => {
 
   it("renders collapse toggle button", () => {
     renderSidebar();
-    expect(screen.getByRole("button", { name: /展开侧边栏/i })).toBeInTheDocument();
+    // Default is expanded, so the button label is "collapse"
+    expect(screen.getByRole("button", { name: /折叠侧边栏/i })).toBeInTheDocument();
   });
 });
