@@ -92,6 +92,8 @@ pub fn run() {
             commands::discover::import_discovered_skill_to_central,
             commands::discover::import_discovered_skill_to_platform,
             commands::discover::clear_discovered_skills,
+            commands::github_import::preview_github_repo_import,
+            commands::github_import::import_github_repo_skills,
             // Marketplace
             commands::marketplace::list_registries,
             commands::marketplace::add_registry,
