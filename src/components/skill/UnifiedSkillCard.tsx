@@ -1,6 +1,5 @@
 import {
   PackagePlus,
-  Download,
   Check,
   Link2,
   FolderOpen,
@@ -8,13 +7,12 @@ import {
   Globe,
   ArrowUpRight,
   Plus,
-  BookOpen,
   ChevronRight,
   X,
   Loader2,
 } from "lucide-react";
+import type { MouseEventHandler, Ref } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { AgentWithStatus } from "@/types";
@@ -90,13 +88,14 @@ export interface UnifiedSkillCardProps {
   publisher?: string;
 
   // ── actions (pass only the ones relevant to the context) ──
-  onDetail?: () => void;
+  onDetail?: MouseEventHandler<HTMLButtonElement>;
   onInstallTo?: () => void;
   onInstallToCentral?: () => void;
   onInstallToPlatform?: () => void;
   onInstall?: () => void;
   onRemove?: () => void;
   isLoading?: boolean;
+  detailButtonRef?: Ref<HTMLButtonElement>;
 }
 
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
@@ -124,10 +123,10 @@ export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
     onInstall,
     onRemove,
     isLoading,
+    detailButtonRef,
   } = props;
 
   // Determine variant features
-  const isCollectionStyle = !!onRemove && !onInstall && !onInstallTo;
   const hasCheckbox = !!checkbox;
   const hasPlatformIcons = !!platformIcons;
   const hasActions = !!(onDetail || onInstallTo || onInstallToCentral || onInstallToPlatform || onInstall || onRemove);
@@ -135,34 +134,6 @@ export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
   // Split agents by category for platform icons
   const lobsterAgents = platformIcons?.agents.filter((a) => a.id !== "central" && a.category === "lobster") ?? [];
   const codingAgents = platformIcons?.agents.filter((a) => a.id !== "central" && a.category !== "lobster") ?? [];
-
-  // ── Collection variant: compact row style ──
-  if (isCollectionStyle) {
-    return (
-      <div
-        className={cn(
-          "flex items-center gap-3 py-2.5 px-4 border-b border-border/50 last:border-0 hover:bg-hover-bg/15 transition-colors group cursor-pointer",
-          className
-        )}
-        onClick={onClick}
-      >
-        <BookOpen className="size-4 text-muted-foreground shrink-0" />
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium truncate">{name}</div>
-          {description && (
-            <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{description}</div>
-          )}
-        </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onRemove?.(); }}
-          aria-label={t("collection.removeSkillLabel", { name })}
-          className="shrink-0 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-        >
-          <X className="size-3.5" />
-        </button>
-      </div>
-    );
-  }
 
   // ── Platform variant: clickable card style ──
   if (onClick && !hasActions && !hasCheckbox && !hasPlatformIcons) {
@@ -216,112 +187,100 @@ export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
 
         {/* Main content */}
         <div className="flex-1 min-w-0 space-y-1.5">
-          {/* Row 1: Name + badges + actions */}
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1 space-y-0.5">
-              {/* Skill name — clickable if onDetail provided */}
-              {onDetail ? (
-                <button
-                  className="font-medium text-sm text-foreground truncate hover:text-primary hover:underline text-left w-full"
-                  onClick={onDetail}
-                  aria-label={t("central.viewDetailsLabel", { name })}
-                >
-                  {name}
-                </button>
-              ) : (
-                <h3 className="text-sm font-medium truncate">{name}</h3>
-              )}
+          {/* Row 1: Name + icon actions */}
+          <div className="flex items-center justify-between gap-2">
+            {/* Skill name — clickable if onDetail provided */}
+            {onDetail ? (
+              <button
+                ref={detailButtonRef}
+                className="font-medium text-sm text-foreground truncate hover:text-primary hover:underline text-left min-w-0 flex-1"
+                onClick={onDetail}
+                aria-label={t("central.viewDetailsLabel", { name })}
+              >
+                {name}
+              </button>
+            ) : (
+              <h3 className="text-sm font-medium truncate min-w-0 flex-1">{name}</h3>
+            )}
 
-              {/* Description */}
-              {description && (
-                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{description}</p>
-              )}
-            </div>
-
-            {/* Action buttons */}
+            {/* Icon action buttons */}
             {hasActions && (
-              <div className="flex items-center gap-1 shrink-0">
-                {/* Detail button (central) */}
-                {onDetail && onInstallTo && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onDetail}
-                    className="text-xs text-muted-foreground h-7 px-2"
-                    aria-label={t("central.viewDetailsLabel", { name })}
-                  >
-                    {t("central.viewDetails")}
-                  </Button>
-                )}
-
-                {/* Install To... (central) */}
+              <div className="flex items-center gap-0.5 shrink-0">
+                {/* Install To... (central / platform / collection / marketplace) */}
                 {onInstallTo && (
-                  <Button
-                    variant="default"
-                    size="sm"
+                  <button
                     onClick={onInstallTo}
-                    className="h-7 px-2 text-xs"
+                    title={t("central.installTo")}
                     aria-label={t("central.installLabel", { name })}
+                    className="p-1 rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary"
                   >
-                    <PackagePlus className="size-3.5" />
-                    <span>{t("central.installTo")}</span>
-                  </Button>
+                    <PackagePlus className="size-4" />
+                  </button>
                 )}
 
                 {/* Install to Central (discover) */}
                 {onInstallToCentral && !isCentral && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <button
                     onClick={onInstallToCentral}
                     disabled={isLoading}
-                    className="h-7 px-2 text-xs"
+                    title={t("discover.installToCentral")}
+                    aria-label={t("discover.installToCentral")}
+                    className="p-1 rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                   >
-                    <ArrowUpRight className="size-3 mr-1" />
-                    {t("discover.installToCentral")}
-                  </Button>
+                    {isLoading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpRight className="size-4" />}
+                  </button>
                 )}
 
                 {/* Install to Platform (discover) */}
                 {onInstallToPlatform && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <button
                     onClick={onInstallToPlatform}
                     disabled={isLoading}
-                    className="h-7 px-2 text-xs"
+                    title={t("discover.installToPlatform")}
+                    aria-label={t("discover.installToPlatform")}
+                    className="p-1 rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                   >
-                    <Plus className="size-3 mr-1" />
-                    {t("discover.installToPlatform")}
-                  </Button>
+                    {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  </button>
                 )}
 
-                {/* Marketplace install / installed badge */}
-                {onInstall && (
-                  isInstalled ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-primary bg-primary/10 px-2 py-1 rounded-md">
-                      <Check className="size-3" />
-                      {t("marketplace.installed")}
-                    </span>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={onInstall}
-                      disabled={isLoading}
-                      className="h-7 text-xs"
-                    >
-                      {isLoading ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}
-                      <span>{t("marketplace.install")}</span>
-                    </Button>
-                  )
+                {/* Marketplace installed indicator (disabled Check icon) */}
+                {onInstall && isInstalled && (
+                  <button
+                    disabled
+                    title={t("marketplace.installed")}
+                    aria-label={t("marketplace.installed")}
+                    className="p-1 rounded-md text-primary cursor-default"
+                  >
+                    <Check className="size-4" />
+                  </button>
+                )}
+
+                {/* Remove (collection) */}
+                {onRemove && (
+                  <button
+                    onClick={onRemove}
+                    title={t("collection.removeSkillLabel", { name })}
+                    aria-label={t("collection.removeSkillLabel", { name })}
+                    className="p-1 rounded-md transition-colors text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <X className="size-4" />
+                  </button>
                 )}
               </div>
             )}
           </div>
 
-          {/* Row 2: Info badges */}
+          {/* Row 2: Description — full width, not compressed by actions */}
+          {description && (
+            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{description}</p>
+          )}
+
+          {/* Row 3: Info badges */}
           <div className="flex items-center gap-3 empty:hidden">
+            {/* Source indicator (platform) */}
+            {sourceType && <SourceIndicator sourceType={sourceType} />}
+
             {/* "Already in Central" badge */}
             {isCentral && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">

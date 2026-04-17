@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { MarketplaceSkill, SkillRegistry } from "@/types";
 
@@ -55,16 +55,31 @@ const storeState: StoreState = {
 };
 
 vi.mock("@/components/skill/UnifiedSkillCard", () => ({
-  UnifiedSkillCard: ({ name, description }: { name: string; description?: string }) => (
+  UnifiedSkillCard: ({
+    name,
+    description,
+    onDetail,
+    onInstall,
+    isInstalled,
+  }: {
+    name: string;
+    description?: string;
+    onDetail?: () => void;
+    onInstall?: () => void;
+    isInstalled?: boolean;
+  }) => (
     <div>
-      <div>{name}</div>
+      <button type="button" onClick={onDetail}>
+        {name}
+      </button>
       {description ? <div>{description}</div> : null}
+      {onInstall ? (
+        <button type="button" onClick={onInstall}>
+          {isInstalled ? "Installed" : "Install"}
+        </button>
+      ) : null}
     </div>
   ),
-}));
-
-vi.mock("@/components/marketplace/SkillPreviewDialog", () => ({
-  SkillPreviewDialog: () => null,
 }));
 
 vi.mock("@/components/central/InstallDialog", () => ({
@@ -79,6 +94,7 @@ const mockInstallSkill = vi.fn();
 const mockAddRegistry = vi.fn();
 const mockRemoveRegistry = vi.fn();
 const mockFindDuplicateRegistry = vi.fn();
+const mockLoadPreviewSkills = vi.fn();
 const mockRescan = vi.fn();
 const mockLoadCentralSkills = vi.fn();
 const mockInstallCentralSkill = vi.fn();
@@ -107,6 +123,7 @@ vi.mock("@/stores/marketplaceStore", () => ({
       addRegistry: mockAddRegistry,
       removeRegistry: mockRemoveRegistry,
       findDuplicateRegistry: mockFindDuplicateRegistry,
+      loadPreviewSkills: mockLoadPreviewSkills,
     }),
 }));
 
@@ -134,6 +151,7 @@ vi.mock("@/stores/centralSkillsStore", () => ({
 
 import { MarketplaceView } from "@/pages/MarketplaceView";
 import { toast } from "sonner";
+import * as tauriBridge from "@/lib/tauri";
 
 const mockedToast = vi.mocked(toast);
 const mockToastSuccess = mockedToast.success as unknown as ReturnType<typeof vi.fn>;
@@ -149,6 +167,7 @@ describe("MarketplaceView", () => {
     mockAddRegistry.mockReset();
     mockRemoveRegistry.mockReset();
     mockFindDuplicateRegistry.mockReset();
+    mockLoadPreviewSkills.mockReset();
     mockRescan.mockReset();
     mockLoadCentralSkills.mockReset();
     mockInstallCentralSkill.mockReset();
@@ -193,6 +212,18 @@ describe("MarketplaceView", () => {
     storeState.installingIds = new Set<string>();
     storeState.error = null as string | null;
     mockFindDuplicateRegistry.mockImplementation(() => null);
+    mockLoadPreviewSkills.mockResolvedValue([
+      {
+        id: "official-skill-1",
+        registry_id: "official-1",
+        name: "Knowledge Work Plugin",
+        description: "Useful repo preview content",
+        download_url: "https://example.com/official-skill-1",
+        is_installed: false,
+        synced_at: "2026-04-16T00:00:00Z",
+        cache_updated_at: "2026-04-16T00:00:00Z",
+      },
+    ]);
   });
 
   function renderView() {
@@ -286,5 +317,94 @@ describe("MarketplaceView", () => {
         "This repo already exists in Official Directory: Anthropic"
       );
     });
+  });
+
+  it("loads official directory preview skills from backend cache instead of showing an empty fallback", async () => {
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Official Directory" }));
+    fireEvent.click(screen.getByRole("button", { name: /Anthropic/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /Browse Skills/i })[0]);
+
+    await waitFor(() => {
+      expect(mockLoadPreviewSkills).toHaveBeenCalled();
+    });
+
+    expect(await screen.findByText("Knowledge Work Plugin")).toBeInTheDocument();
+    expect(screen.getByText("Useful repo preview content")).toBeInTheDocument();
+    expect(screen.queryByText("No skills found")).not.toBeInTheDocument();
+  });
+
+  it("shows stable browser fallback copy when official preview runs without Tauri", async () => {
+    const isTauriSpy = vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(false);
+
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Official Directory" }));
+    fireEvent.click(screen.getByRole("button", { name: /Anthropic/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /Browse Skills/i })[0]);
+
+    expect(await screen.findByText(/Preview unavailable in browser mode/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Open this flow in the desktop app to browse and install repository skills/i)
+    ).toBeInTheDocument();
+    expect(mockLoadPreviewSkills).not.toHaveBeenCalled();
+
+    isTauriSpy.mockRestore();
+  });
+
+  it("opens a marketplace preview drawer without leaving the marketplace route", async () => {
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "My Sources" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cached Skill" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText("Cached Skill")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Source/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Repo One/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Install" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("link", { name: /Open SKILL.md/i })).toHaveAttribute(
+      "href",
+      "https://example.com/skill-1"
+    );
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("restores focus to the originating marketplace card when the preview drawer closes", async () => {
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "My Sources" }));
+    const trigger = screen.getByRole("button", { name: "Cached Skill" });
+
+    fireEvent.click(trigger);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Cached Skill" })).toHaveFocus();
+  });
+
+  it("installs from the preview drawer and refreshes shared state without a manual reload", async () => {
+    mockInstallSkill.mockResolvedValue(undefined);
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "My Sources" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cached Skill" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    await waitFor(() => {
+      expect(mockInstallSkill).toHaveBeenCalledWith("skill-1");
+    });
+    await waitFor(() => {
+      expect(mockRescan).toHaveBeenCalled();
+    });
+    expect(mockToastSuccess).toHaveBeenCalledWith("Installed successfully");
   });
 });

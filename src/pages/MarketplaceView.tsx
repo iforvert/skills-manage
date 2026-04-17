@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Store,
@@ -33,6 +33,7 @@ import {
   RecommendedSkill,
 } from "@/data/officialSources";
 import { SkillPreviewDialog } from "@/components/marketplace/SkillPreviewDialog";
+import { isTauriRuntime } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 type TabId = "recommended" | "official" | "my-sources";
@@ -42,6 +43,22 @@ type DuplicateRegistryDetails = {
   name: string;
   url: string;
   isBuiltin: boolean;
+};
+
+type PreviewStatus =
+  | { kind: "idle" }
+  | { kind: "browser-fallback"; title: string; detail: string }
+  | { kind: "error"; title: string; detail: string };
+
+type MarketplaceDetailSkill = {
+  id: string;
+  name: string;
+  downloadUrl: string;
+  description?: string;
+  publisher?: string;
+  sourceLabel?: string;
+  sourceUrl?: string | null;
+  installed?: boolean;
 };
 
 function parseDuplicateRegistryError(error: unknown): DuplicateRegistryDetails | null {
@@ -201,6 +218,7 @@ export function MarketplaceView() {
   const selectRegistry = useMarketplaceStore((s) => s.selectRegistry);
   const setSearchQuery = useMarketplaceStore((s) => s.setSearchQuery);
   const syncRegistry = useMarketplaceStore((s) => s.syncRegistry);
+  const loadPreviewSkills = useMarketplaceStore((s) => s.loadPreviewSkills);
   const installSkill = useMarketplaceStore((s) => s.installSkill);
   const addRegistry = useMarketplaceStore((s) => s.addRegistry);
   const removeRegistry = useMarketplaceStore((s) => s.removeRegistry);
@@ -220,12 +238,14 @@ export function MarketplaceView() {
   const [removingRegistryIds, setRemovingRegistryIds] = useState<Set<string>>(new Set());
 
   // Preview state — inline skills preview in Official Directory
-  interface PreviewSkill { name: string; description?: string; downloadUrl: string }
+  interface PreviewSkill { id: string; name: string; description?: string; downloadUrl: string }
   const [previewRepo, setPreviewRepo] = useState<string | null>(null); // repo fullName
   const [previewSkills, setPreviewSkills] = useState<PreviewSkill[]>([]);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewInstallingIds, setPreviewInstallingIds] = useState<Set<string>>(new Set());
-  const [detailSkill, setDetailSkill] = useState<{ name: string; downloadUrl: string; publisher?: string } | null>(null);
+  const [detailSkill, setDetailSkill] = useState<MarketplaceDetailSkill | null>(null);
+  const [previewStatus, setPreviewStatus] = useState<PreviewStatus>({ kind: "idle" });
+  const detailTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     loadRegistries();
@@ -329,6 +349,9 @@ export function MarketplaceView() {
     try {
       await installSkill(skillId);
       await rescan();
+      setDetailSkill((current) =>
+        current && current.id === skillId ? { ...current, installed: true } : current
+      );
       toast.success(t("marketplace.installSuccess"));
     } catch (err) {
       toast.error(String(err));
@@ -351,66 +374,57 @@ export function MarketplaceView() {
     }
   }
 
-  async function handlePreviewRepo(repoFullName: string) {
+  async function handlePreviewRepo(repoFullName: string, repoUrl: string) {
     if (previewRepo === repoFullName) {
       setPreviewRepo(null); // toggle off
+      setPreviewStatus({ kind: "idle" });
       return;
     }
     setPreviewRepo(repoFullName);
     setPreviewSkills([]);
+    setPreviewStatus({ kind: "idle" });
     setIsPreviewLoading(true);
     try {
-      const [owner, repo] = repoFullName.split("/");
-      const headers: Record<string, string> = { "User-Agent": "skills-manage" };
-
-      // Scan root + skills/ subdirectory
-      const scanPaths = ["", "skills"];
-      const found: PreviewSkill[] = [];
-      const seenNames = new Set<string>();
-
-      for (const base of scanPaths) {
-        const apiUrl = base
-          ? `https://api.github.com/repos/${owner}/${repo}/contents/${base}`
-          : `https://api.github.com/repos/${owner}/${repo}/contents/`;
-        const resp = await fetch(apiUrl, { headers });
-        if (!resp.ok) continue;
-        const contents: Array<{ name: string; type: string; path: string }> = await resp.json();
-        const dirs = contents.filter((c) => c.type === "dir" && c.name !== "skills");
-
-        for (const dir of dirs) {
-          const dirResp = await fetch(
-            `https://api.github.com/repos/${owner}/${repo}/contents/${dir.path}`,
-            { headers }
-          );
-          if (!dirResp.ok) continue;
-          const dirContents: Array<{ name: string; type: string; download_url?: string }> = await dirResp.json();
-          const skillMd = dirContents.find((c) => c.name === "SKILL.md" && c.type === "file");
-          if (skillMd && !seenNames.has(dir.name)) {
-            seenNames.add(dir.name);
-            const downloadUrl = skillMd.download_url ??
-              `https://raw.githubusercontent.com/${owner}/${repo}/main/${dir.path}/SKILL.md`;
-
-            // Try to parse frontmatter for description
-            let description: string | undefined;
-            try {
-              const mdResp = await fetch(downloadUrl);
-              if (mdResp.ok) {
-                const text = await mdResp.text();
-                const match = text.match(/^---\s*\n([\s\S]*?)\n---/);
-                if (match) {
-                  const descMatch = match[1].match(/description:\s*(.+)/);
-                  if (descMatch) description = descMatch[1].trim().replace(/^["']|["']$/g, "");
-                }
-              }
-            } catch { /* ignore */ }
-
-            found.push({ name: dir.name, description, downloadUrl });
-          }
-        }
+      if (!isTauriRuntime()) {
+        setPreviewStatus({
+          kind: "browser-fallback",
+          title:
+            lang === "zh"
+              ? "浏览器模式下暂不支持预览"
+              : "Preview unavailable in browser mode",
+          detail:
+            lang === "zh"
+              ? "请在桌面应用中打开此流程，以浏览并安装仓库里的技能。"
+              : "Open this flow in the desktop app to browse and install repository skills.",
+        });
+        return;
       }
 
-      setPreviewSkills(found);
+      let registryId = registries.find((registry) => registry.url === repoUrl)?.id;
+
+      if (!registryId) {
+        const repoName = repoFullName.split("/").pop() ?? repoFullName;
+        const addedRegistry = await addRegistry(repoName, "github", repoUrl);
+        registryId = addedRegistry.id;
+        await loadRegistries();
+      }
+
+      await syncRegistry(registryId);
+      const skills = await loadPreviewSkills(registryId);
+      setPreviewSkills(
+        skills.map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description ?? undefined,
+          downloadUrl: skill.download_url,
+        }))
+      );
     } catch (err) {
+      setPreviewStatus({
+        kind: "error",
+        title: lang === "zh" ? "预览加载失败" : "Failed to load preview",
+        detail: String(err),
+      });
       toast.error(String(err));
     } finally {
       setIsPreviewLoading(false);
@@ -442,6 +456,13 @@ export function MarketplaceView() {
         return next;
       });
     }
+  }
+
+  function openDetailSkill(skill: MarketplaceDetailSkill, trigger?: EventTarget | null) {
+    if (trigger instanceof HTMLElement) {
+      detailTriggerRef.current = trigger;
+    }
+    setDetailSkill(skill);
   }
 
   async function handleAddRepoToSources(repoFullName: string, url: string) {
@@ -585,7 +606,21 @@ export function MarketplaceView() {
                         key: tag,
                         label: lang === "zh" ? TAG_LABELS[tag].zh : TAG_LABELS[tag].en,
                       }))}
-                      onDetail={() => setDetailSkill({ name: skill.name, downloadUrl, publisher: skill.publisher })}
+                      onDetail={(event) =>
+                        openDetailSkill(
+                          {
+                            id: skill.name,
+                            name: skill.name,
+                            description: skill.description,
+                            downloadUrl,
+                            publisher: skill.publisher,
+                            sourceLabel: skill.publisher,
+                            sourceUrl: `https://github.com/${skill.repoFullName}`,
+                            installed: false,
+                          },
+                          event?.currentTarget ?? null
+                        )
+                      }
                       onInstall={() => handleInstallRecommended(skill)}
                       isLoading={recommendedInstallingIds.has(skill.name)}
                     />
@@ -653,7 +688,7 @@ export function MarketplaceView() {
                   <div key={repo.fullName} className="rounded-md border border-border overflow-hidden">
                     {/* Repo header — clickable to toggle preview */}
                     <button
-                      onClick={() => handlePreviewRepo(repo.fullName)}
+                      onClick={() => handlePreviewRepo(repo.fullName, repo.url)}
                       className={cn(
                         "flex items-center gap-3 w-full p-4 transition-colors cursor-pointer text-left",
                         isPreviewing ? "bg-primary/10" : "hover:bg-hover-bg/10"
@@ -691,7 +726,11 @@ export function MarketplaceView() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={(e) => { e.stopPropagation(); handlePreviewRepo(repo.fullName); setTimeout(() => handlePreviewRepo(repo.fullName), 50); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewRepo(null);
+                              setTimeout(() => handlePreviewRepo(repo.fullName, repo.url), 50);
+                            }}
                             disabled={isPreviewLoading}
                             className="h-6 text-xs px-2"
                           >
@@ -723,6 +762,11 @@ export function MarketplaceView() {
                             <Loader2 className="size-4 animate-spin" />
                             <span>{lang === "zh" ? "正在从 GitHub 获取 Skills..." : "Fetching skills from GitHub..."}</span>
                           </div>
+                        ) : previewStatus.kind === "browser-fallback" || previewStatus.kind === "error" ? (
+                          <div className="px-4 py-6 text-center">
+                            <div className="text-sm font-medium text-foreground">{previewStatus.title}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">{previewStatus.detail}</div>
+                          </div>
                         ) : previewSkills.length === 0 ? (
                           <div className="text-center py-6 text-xs text-muted-foreground">
                             {lang === "zh" ? "未找到 Skills" : "No skills found"}
@@ -744,7 +788,22 @@ export function MarketplaceView() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={(e) => { e.stopPropagation(); setDetailSkill({ name: skill.name, downloadUrl: skill.downloadUrl, publisher: repo.fullName }); }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDetailSkill(
+                                        {
+                                          id: skill.id,
+                                          name: skill.name,
+                                          description: skill.description,
+                                          downloadUrl: skill.downloadUrl,
+                                          publisher: repo.fullName,
+                                          sourceLabel: selectedPublisher.name,
+                                          sourceUrl: repo.url,
+                                          installed: false,
+                                        },
+                                        e.currentTarget
+                                      );
+                                    }}
                                     className="h-6 text-[10px] px-2"
                                   >
                                     <FileText className="size-3" />
@@ -971,10 +1030,23 @@ export function MarketplaceView() {
                           key={skill.id}
                           name={skill.name}
                           description={skill.description}
-                          isInstalled={skill.is_installed}
-                          onDetail={() => setDetailSkill({ name: skill.name, downloadUrl: skill.download_url })}
+                          onDetail={(event) =>
+                            openDetailSkill(
+                              {
+                                id: skill.id,
+                                name: skill.name,
+                                description: skill.description,
+                                downloadUrl: skill.download_url,
+                                sourceLabel: selectedRegistryObj.name,
+                                sourceUrl: selectedRegistryObj.url,
+                                installed: skill.is_installed,
+                              },
+                              event?.currentTarget ?? null
+                            )
+                          }
                           onInstall={() => handleInstallFromSource(skill.id)}
                           isLoading={installingIds.has(skill.id)}
+                          isInstalled={skill.is_installed}
                         />
                       ))}
                     </div>
@@ -991,13 +1063,25 @@ export function MarketplaceView() {
         <SkillPreviewDialog
           open={!!detailSkill}
           onOpenChange={(open) => { if (!open) setDetailSkill(null); }}
+          description={detailSkill.description}
           skillName={detailSkill.name}
           downloadUrl={detailSkill.downloadUrl}
           publisher={detailSkill.publisher}
+          sourceLabel={detailSkill.sourceLabel}
+          sourceUrl={detailSkill.sourceUrl}
+          installed={detailSkill.installed}
           onInstall={() => {
-            handleInstallPreviewSkill({ name: detailSkill.name, downloadUrl: detailSkill.downloadUrl });
+            if (detailSkill.id.startsWith("skill-")) {
+              void handleInstallFromSource(detailSkill.id);
+              return;
+            }
+            handleInstallPreviewSkill({ id: detailSkill.id, name: detailSkill.name, downloadUrl: detailSkill.downloadUrl });
           }}
-          isInstalling={previewInstallingIds.has(detailSkill.name)}
+          isInstalling={installingIds.has(detailSkill.id) || previewInstallingIds.has(detailSkill.name)}
+          onAfterCloseFocus={() => {
+            detailTriggerRef.current?.focus();
+            detailTriggerRef.current = null;
+          }}
         />
       )}
     </div>
