@@ -125,6 +125,8 @@ const mockRefreshExplanation = vi.fn();
 const mockCleanupExplanationListeners = vi.fn();
 const mockReset = vi.fn();
 const mockRescan = vi.fn();
+const mockRefreshCounts = vi.fn();
+const mockRefreshInstallations = vi.fn();
 
 function buildDetailStoreState(overrides = {}) {
   return {
@@ -144,6 +146,7 @@ function buildDetailStoreState(overrides = {}) {
     refreshExplanation: mockRefreshExplanation,
     installSkill: mockInstallSkill,
     uninstallSkill: mockUninstallSkill,
+    refreshInstallations: mockRefreshInstallations,
     cleanupExplanationListeners: mockCleanupExplanationListeners,
     reset: mockReset,
     ...overrides,
@@ -158,6 +161,7 @@ function buildPlatformStoreState(overrides = {}) {
     error: null,
     initialize: vi.fn(),
     rescan: mockRescan,
+    refreshCounts: mockRefreshCounts,
     ...overrides,
   };
 }
@@ -291,6 +295,8 @@ describe("SkillDetailView", () => {
     await waitFor(() => {
       expect(mockInstallSkill).toHaveBeenCalledWith("frontend-design", "cursor");
     });
+    expect(mockRefreshCounts).toHaveBeenCalledTimes(1);
+    expect(mockRefreshInstallations).toHaveBeenCalledWith("frontend-design");
   });
 
   it("calls uninstallSkill when linked platform icon is clicked", async () => {
@@ -303,6 +309,8 @@ describe("SkillDetailView", () => {
     await waitFor(() => {
       expect(mockUninstallSkill).toHaveBeenCalledWith("frontend-design", "claude-code");
     });
+    expect(mockRefreshCounts).toHaveBeenCalledTimes(1);
+    expect(mockRefreshInstallations).toHaveBeenCalledWith("frontend-design");
   });
 
   // ── Collections ───────────────────────────────────────────────────────────
@@ -674,6 +682,24 @@ describe("SkillDetailView", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("collection-picker-dialog")).toBeNull();
     });
+  });
+
+  it("restores focus to the add-to-collection trigger after closing the picker", async () => {
+    renderView();
+    const addBtn = screen.getByRole("button", { name: /加入技能集/i });
+    fireEvent.click(addBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("collection-picker-dialog")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Cancel picker/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("collection-picker-dialog")).toBeNull();
+    });
+
+    expect(addBtn).toHaveFocus();
   });
 
   it("calls loadDetail to refresh skill after collections are added", async () => {

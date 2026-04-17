@@ -1,4 +1,4 @@
-import { useEffect, useState, type Ref, type ReactNode } from "react";
+import { useEffect, useRef, useState, type Ref, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -224,6 +224,7 @@ export function SkillDetailView({
   const [activeTab, setActiveTab] = useState<PreviewTab>("markdown");
   const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const addToCollectionButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // Load detail on mount / skillId change, reset on unmount.
   // `reset()` must be safe to call regardless of shell and aborts any
@@ -280,6 +281,15 @@ export function SkillDetailView({
   function handleCollectionAdded() {
     if (skillId) {
       loadDetail(skillId);
+    }
+  }
+
+  function handleCollectionPickerOpenChange(open: boolean) {
+    setIsCollectionPickerOpen(open);
+    if (!open) {
+      queueMicrotask(() => {
+        addToCollectionButtonRef.current?.focus();
+      });
     }
   }
 
@@ -587,6 +597,7 @@ export function SkillDetailView({
                     </span>
                   ))}
                   <Button
+                    ref={addToCollectionButtonRef}
                     variant="ghost"
                     size="sm"
                     className="gap-1 text-muted-foreground hover:text-foreground h-6 px-2 text-xs"
@@ -607,7 +618,7 @@ export function SkillDetailView({
       {skillId && (
         <CollectionPickerDialog
           open={isCollectionPickerOpen}
-          onOpenChange={setIsCollectionPickerOpen}
+          onOpenChange={handleCollectionPickerOpenChange}
           skillId={skillId}
           currentCollectionIds={detail?.collections ?? []}
           onAdded={handleCollectionAdded}

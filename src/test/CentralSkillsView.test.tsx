@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { CentralSkillsView } from "../pages/CentralSkillsView";
 import { AgentWithStatus, SkillWithLinks } from "../types";
-import { consumeScrollPosition } from "../lib/scrollRestoration";
 
 // Mock stores
 vi.mock("../stores/centralSkillsStore", () => ({
@@ -12,6 +11,33 @@ vi.mock("../stores/centralSkillsStore", () => ({
 
 vi.mock("../stores/platformStore", () => ({
   usePlatformStore: vi.fn(),
+}));
+
+vi.mock("../components/skill/SkillDetailDrawer", () => ({
+  SkillDetailDrawer: ({
+    open,
+    skillId,
+    onOpenChange,
+    returnFocusRef,
+  }: {
+    open: boolean;
+    skillId: string | null;
+    onOpenChange: (open: boolean) => void;
+    returnFocusRef?: { current: HTMLElement | null };
+  }) =>
+    open ? (
+      <div data-testid="skill-detail-drawer">
+        <div>drawer-skill:{skillId}</div>
+        <button
+          onClick={() => {
+            onOpenChange(false);
+            returnFocusRef?.current?.focus();
+          }}
+        >
+          Close drawer
+        </button>
+      </div>
+    ) : null,
 }));
 
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
@@ -76,6 +102,8 @@ const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
 const mockTogglePlatformLink = vi.fn();
 const mockRescan = vi.fn();
+const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
+const mockUsePlatformStore = vi.mocked(usePlatformStore);
 
 function buildCentralStoreState(overrides = {}) {
   return {
@@ -107,12 +135,12 @@ function buildPlatformStoreState(overrides = {}) {
 }
 
 function renderCentralSkillsView() {
-  vi.mocked(useCentralSkillsStore).mockImplementation((selector?: unknown) => {
+  mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
     const state = buildCentralStoreState();
     if (typeof selector === "function") return selector(state);
     return state;
   });
-  vi.mocked(usePlatformStore).mockImplementation((selector?: unknown) => {
+  mockUsePlatformStore.mockImplementation((selector?: unknown) => {
     const state = buildPlatformStoreState();
     if (typeof selector === "function") return selector(state);
     return state;
@@ -130,10 +158,6 @@ function renderCentralSkillsView() {
 describe("CentralSkillsView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    consumeScrollPosition("central");
   });
 
   // ── Header ────────────────────────────────────────────────────────────────
@@ -208,7 +232,7 @@ describe("CentralSkillsView", () => {
   // ── Empty State ───────────────────────────────────────────────────────────
 
   it("shows first-visit empty state when no skills exist", () => {
-    vi.mocked(useCentralSkillsStore).mockImplementation((selector?: unknown) => {
+    mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
       const state = buildCentralStoreState({ skills: [] });
       if (typeof selector === "function") return selector(state);
       return state;
@@ -230,7 +254,7 @@ describe("CentralSkillsView", () => {
   });
 
   it("shows loading state", () => {
-    vi.mocked(useCentralSkillsStore).mockImplementation((selector?: unknown) => {
+    mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
       const state = buildCentralStoreState({ isLoading: true, skills: [] });
       if (typeof selector === "function") return selector(state);
       return state;
@@ -330,105 +354,43 @@ describe("CentralSkillsView", () => {
     });
   });
 
-  it("passes central scroll restoration state when opening detail", async () => {
-    render(
-      <MemoryRouter initialEntries={["/central"]}>
-        <Routes>
-          <Route path="/central" element={<CentralSkillsView />} />
-          <Route path="/skill/:skillId" element={<div>detail-route</div>} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    const scroller = screen.getByText("frontend-design").closest("[class*='overflow-auto']");
-    expect(scroller).not.toBeNull();
-    if (!scroller) return;
-
-    Object.defineProperty(scroller, "scrollTop", {
-      value: 240,
-      writable: true,
-      configurable: true,
-    });
+  it("opens the skill detail drawer without navigating away", async () => {
+    renderCentralSkillsView();
 
     fireEvent.click(screen.getByRole("button", { name: /查看 frontend-design 的详情/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("detail-route")).toBeInTheDocument();
+      expect(screen.getByTestId("skill-detail-drawer")).toBeInTheDocument();
     });
-
-    const historyState = window.history.state?.usr;
-    expect(historyState.scrollRestoration).toEqual({
-      key: "central",
-      scrollTop: 240,
-    });
+    expect(screen.getByText("drawer-skill:frontend-design")).toBeInTheDocument();
   });
 
-  it("restores nested scroll position after data has hydrated", async () => {
-    let centralState = buildCentralStoreState({
-      skills: [],
-      isLoading: true,
-    });
+  it("preserves search and scroll state when closing the drawer and restores focus", async () => {
+    renderCentralSkillsView();
 
-    vi.mocked(useCentralSkillsStore).mockImplementation((selector?: unknown) => {
-      if (typeof selector === "function") return selector(centralState);
-      return centralState;
-    });
-    vi.mocked(usePlatformStore).mockImplementation((selector?: unknown) => {
-      const state = buildPlatformStoreState();
-      if (typeof selector === "function") return selector(state);
-      return state;
-    });
+    const searchInput = screen.getByPlaceholderText(/搜索中央技能库/i);
+    fireEvent.change(searchInput, { target: { value: "frontend" } });
 
-    const { rerender } = render(
-      <MemoryRouter
-        initialEntries={[
-          {
-            pathname: "/central",
-            state: {
-              scrollRestoration: {
-                key: "central",
-                scrollTop: 360,
-              },
-            },
-          },
-        ]}
-      >
-        <Routes>
-          <Route path="/central" element={<CentralSkillsView />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    expect(screen.getByText("正在加载技能...")).toBeInTheDocument();
-    expect(consumeScrollPosition("central")).toBeNull();
-
-    centralState = buildCentralStoreState();
-    rerender(
-      <MemoryRouter
-        initialEntries={[
-          {
-            pathname: "/central",
-            state: {
-              scrollRestoration: {
-                key: "central",
-                scrollTop: 360,
-              },
-            },
-          },
-        ]}
-      >
-        <Routes>
-          <Route path="/central" element={<CentralSkillsView />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    const scroller = screen.getByText("frontend-design").closest("[class*='overflow-auto']");
+    const scroller = searchInput.closest(".flex.flex-col.h-full")?.querySelector(".flex-1.overflow-auto.p-6");
     expect(scroller).not.toBeNull();
     if (!scroller) return;
+    (scroller as HTMLDivElement).scrollTop = 240;
+
+    const trigger = screen.getByRole("button", { name: /查看 frontend-design 的详情/i });
+    fireEvent.click(trigger);
 
     await waitFor(() => {
-      expect((scroller as HTMLDivElement).scrollTop).toBe(360);
+      expect(screen.getByTestId("skill-detail-drawer")).toBeInTheDocument();
     });
+
+    fireEvent.click(screen.getByRole("button", { name: /close drawer/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("skill-detail-drawer")).not.toBeInTheDocument();
+    });
+
+    expect(searchInput).toHaveValue("frontend");
+    expect((scroller as HTMLDivElement).scrollTop).toBe(240);
+    expect(trigger).toHaveFocus();
   });
 });

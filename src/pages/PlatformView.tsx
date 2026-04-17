@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Search, Blocks } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -8,9 +8,9 @@ import { useSkillStore } from "@/stores/skillStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { Input } from "@/components/ui/input";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
+import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { InstallDialog } from "@/components/central/InstallDialog";
-import { consumeScrollPosition, createScrollRestorationState } from "@/lib/scrollRestoration";
 import { SkillWithLinks } from "@/types";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
@@ -30,8 +30,6 @@ function EmptyState({ message }: { message: string }) {
 
 export function PlatformView() {
   const { agentId } = useParams<{ agentId: string }>();
-  const navigate = useNavigate();
-  const location = useLocation();
   const { t } = useTranslation();
   const agents = usePlatformStore((state) => state.agents);
 
@@ -48,14 +46,10 @@ export function PlatformView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [installTargetSkill, setInstallTargetSkill] = useState<SkillWithLinks | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const restorationState = location.state?.scrollRestoration;
-  const restorationKey =
-    restorationState &&
-    agentId &&
-    restorationState.key === `platform:${agentId}`
-      ? restorationState.key
-      : null;
+  const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // Load skills for this agent when agentId changes
   useEffect(() => {
@@ -117,19 +111,14 @@ export function PlatformView() {
     );
   }, [skills, searchQuery]);
 
-  useEffect(() => {
-    if (!restorationKey || isLoading || skills.length === 0 || !contentRef.current) {
-      return;
-    }
+  function setDetailButtonRef(skillId: string, node: HTMLButtonElement | null) {
+    detailButtonRefs.current[skillId] = node;
+  }
 
-    const scrollTop = consumeScrollPosition(restorationKey);
-    if (scrollTop === null) {
-      return;
-    }
-
-    contentRef.current.scrollTop = scrollTop;
-    navigate(location.pathname, { replace: true, state: null });
-  }, [restorationKey, isLoading, skills.length, navigate, location.pathname]);
+  function handleOpenDrawer(skillId: string) {
+    setDrawerSkillId(skillId);
+    setIsDrawerOpen(true);
+  }
 
   if (!agent) {
     return (
@@ -185,17 +174,9 @@ export function PlatformView() {
                 name={skill.name}
                 description={skill.description}
                 sourceType={skill.link_type as "symlink" | "copy"}
-                onDetail={() =>
-                  navigate(`/skill/${skill.id}`, {
-                    state: {
-                      scrollRestoration: createScrollRestorationState(
-                        `platform:${agentId}`,
-                        contentRef.current?.scrollTop ?? 0
-                      ),
-                    },
-                  })
-                }
+                onDetail={() => handleOpenDrawer(skill.id)}
                 onInstallTo={() => handleInstallClick(skill.id)}
+                detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
               />
             ))}
           </div>
@@ -209,6 +190,24 @@ export function PlatformView() {
         skill={installTargetSkill}
         agents={centralAgents}
         onInstall={handleInstall}
+      />
+
+      <SkillDetailDrawer
+        open={isDrawerOpen}
+        skillId={drawerSkillId}
+        onOpenChange={(open) => {
+          setIsDrawerOpen(open);
+          if (!open) {
+            setDrawerSkillId(null);
+          }
+        }}
+        returnFocusRef={
+          drawerSkillId
+            ? {
+                current: detailButtonRefs.current[drawerSkillId] ?? null,
+              }
+            : undefined
+        }
       />
     </div>
   );
