@@ -491,4 +491,27 @@ describe("MarketplaceView", () => {
     expect(screen.getByText(/Preview is read-only and performs no write/i)).toBeInTheDocument();
     expect(mockImportGitHubRepoSkills).not.toHaveBeenCalled();
   });
+
+  it("shows a friendly desktop-only state for the github import wizard in browser mode", async () => {
+    const isTauriSpy = vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(false);
+
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import GitHub repo" }));
+    fireEvent.change(screen.getByLabelText("GitHub repository URL"), {
+      target: { value: "https://github.com/anthropics/skills" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview import" }));
+
+    await waitFor(() => {
+      expect(mockPreviewGitHubRepoImport).toHaveBeenCalledWith("https://github.com/anthropics/skills");
+    });
+    expect(
+      await screen.findByText(/This shared wizard is available in the browser for guidance/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Desktop-only feature: GitHub repo preview is available in the Tauri app/i)).toBeInTheDocument();
+    expect(mockImportGitHubRepoSkills).not.toHaveBeenCalled();
+
+    isTauriSpy.mockRestore();
+  });
 });

@@ -1,18 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@tauri-apps/api/core", () => ({
+vi.mock("@/lib/tauri", () => ({
   invoke: vi.fn(),
+  isTauriRuntime: vi.fn(() => true),
 }));
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauriRuntime } from "@/lib/tauri";
 
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 
 const mockInvoke = vi.mocked(invoke);
+const mockIsTauriRuntime = vi.mocked(isTauriRuntime);
 
 describe("marketplaceStore", () => {
   beforeEach(() => {
     mockInvoke.mockReset();
+    mockIsTauriRuntime.mockReset();
+    mockIsTauriRuntime.mockReturnValue(true);
     useMarketplaceStore.setState({
       registries: [],
       skills: [],
@@ -284,6 +288,22 @@ describe("marketplaceStore", () => {
     expect(useMarketplaceStore.getState().githubImport.isPreviewLoading).toBe(false);
   });
 
+  it("reports a friendly desktop-only error when preview is triggered outside Tauri", async () => {
+    mockIsTauriRuntime.mockReturnValue(false);
+
+    await expect(
+      useMarketplaceStore
+        .getState()
+        .previewGitHubRepoImport("https://github.com/anthropics/skills")
+    ).rejects.toThrow("Desktop-only feature: GitHub repo preview is available in the Tauri app.");
+
+    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(useMarketplaceStore.getState().githubImport.error).toContain("Desktop-only feature");
+    expect(useMarketplaceStore.getState().githubImport.previewedRepoUrl).toBe(
+      "https://github.com/anthropics/skills"
+    );
+  });
+
   it("stores github repo import results", async () => {
     const result = {
       repo: {
@@ -328,6 +348,24 @@ describe("marketplaceStore", () => {
       ],
     });
     expect(useMarketplaceStore.getState().githubImport.importResult).toEqual(result);
+    expect(useMarketplaceStore.getState().githubImport.isImporting).toBe(false);
+  });
+
+  it("reports a friendly desktop-only error when import is triggered outside Tauri", async () => {
+    mockIsTauriRuntime.mockReturnValue(false);
+
+    await expect(
+      useMarketplaceStore.getState().importGitHubRepoSkills("https://github.com/dorukardahan/twitterapi-io-skill", [
+        {
+          sourcePath: "twitterapi-io-skill/SKILL.md",
+          resolution: "overwrite",
+          renamedSkillId: null,
+        },
+      ])
+    ).rejects.toThrow("Desktop-only feature: GitHub repo import is available in the Tauri app.");
+
+    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(useMarketplaceStore.getState().githubImport.error).toContain("Desktop-only feature");
     expect(useMarketplaceStore.getState().githubImport.isImporting).toBe(false);
   });
 });

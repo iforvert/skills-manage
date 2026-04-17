@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { isTauriRuntime } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 type WizardStep = "input" | "preview" | "confirm" | "result";
@@ -81,6 +82,7 @@ export function GitHubRepoImportWizard({
   const { t } = useTranslation();
   const [step, setStep] = useState<WizardStep>("input");
   const [selectionState, setSelectionState] = useState<Record<string, SelectionState>>({});
+  const browserMode = !isTauriRuntime();
 
   useEffect(() => {
     if (!open) {
@@ -208,8 +210,18 @@ export function GitHubRepoImportWizard({
               </Button>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              {t("marketplace.githubImportNoWriteHint")}
+              {browserMode
+                ? t("marketplace.githubImportDesktopOnlyHint")
+                : t("marketplace.githubImportNoWriteHint")}
             </p>
+            {browserMode ? (
+              <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <span>{t("marketplace.githubImportDesktopOnlyState")}</span>
+                </div>
+              </div>
+            ) : null}
             {previewError ? (
               <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
                 <div className="flex items-start gap-2">

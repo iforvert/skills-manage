@@ -392,6 +392,8 @@
     "githubRepoUrl": "GitHub 仓库 URL",
     "previewImport": "预览导入",
     "githubImportNoWriteHint": "预览为只读操作，在你确认导入前不会执行任何写入。",
+    "githubImportDesktopOnlyHint": "当前版本仅桌面应用支持 GitHub 仓库预览与导入。",
+    "githubImportDesktopOnlyState": "该共享向导在浏览器中会展示引导说明，但预览/导入操作只会在启用了 Tauri bridge 的桌面应用里执行。",
     "githubImportFoundSkills": "发现 {{count}} 个技能",
     "conflictDetected": "检测到冲突",
     "readyToImport": "可直接导入",

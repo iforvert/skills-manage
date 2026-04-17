@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauriRuntime } from "@/lib/tauri";
 import {
   SkillRegistry,
   MarketplaceSkill,
@@ -223,6 +223,21 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   previewGitHubRepoImport: async (repoUrl: string) => {
+    if (!isTauriRuntime()) {
+      const error = "Desktop-only feature: GitHub repo preview is available in the Tauri app.";
+      set((state) => ({
+        githubImport: {
+          ...state.githubImport,
+          isPreviewLoading: false,
+          preview: null,
+          importResult: null,
+          previewedRepoUrl: repoUrl,
+          error,
+        },
+      }));
+      throw new Error(error);
+    }
+
     set((state) => ({
       githubImport: {
         ...state.githubImport,
@@ -265,6 +280,18 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   importGitHubRepoSkills: async (repoUrl: string, selections: GitHubSkillImportSelection[]) => {
+    if (!isTauriRuntime()) {
+      const error = "Desktop-only feature: GitHub repo import is available in the Tauri app.";
+      set((state) => ({
+        githubImport: {
+          ...state.githubImport,
+          isImporting: false,
+          error,
+        },
+      }));
+      throw new Error(error);
+    }
+
     set((state) => ({
       githubImport: {
         ...state.githubImport,

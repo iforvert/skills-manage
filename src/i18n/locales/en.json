@@ -392,6 +392,8 @@
     "githubRepoUrl": "GitHub repository URL",
     "previewImport": "Preview import",
     "githubImportNoWriteHint": "Preview is read-only and performs no write before you confirm import.",
+    "githubImportDesktopOnlyHint": "GitHub repo preview and import are desktop-only actions in this release.",
+    "githubImportDesktopOnlyState": "This shared wizard is available in the browser for guidance, but preview/import actions only run in the desktop app with the Tauri bridge enabled.",
     "githubImportFoundSkills": "{{count}} discovered skill(s)",
     "conflictDetected": "Conflict detected",
     "readyToImport": "Ready to import",
