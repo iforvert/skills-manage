@@ -22,7 +22,7 @@ None.
 
 ## Work Procedure
 
-1. Read `mission.md`, mission `AGENTS.md`, `.factory/library/architecture.md`, `.factory/library/claude-platform-scan.md`, and `.factory/library/user-testing.md` before changing code.
+1. Read `mission.md`, mission `AGENTS.md`, `.factory/library/architecture.md`, `.factory/library/claude-platform-scan.md`, `.factory/library/user-testing.md`, and any newly added mission library notes that document backend/frontend contracts for the feature you are repairing (for example source-aware detail API notes from prior backend work or scrutiny rounds) before changing code.
 2. Write failing Vitest tests first for the exact UI/state contract you are changing. Use duplicate-source fixtures, not distinct-name shortcuts.
 3. Keep one Claude platform surface. Do not introduce a second Claude platform entry or Discover-style escape hatch.
 4. Make source origin explicit in the UI (`user` vs `marketplace`). Do not reuse install/link indicators as the source marker.
