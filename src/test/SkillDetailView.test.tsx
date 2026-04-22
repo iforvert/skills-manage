@@ -588,6 +588,55 @@ describe("SkillDetailView", () => {
     });
   });
 
+  it("loads cached explanation with the selected Claude row id", async () => {
+    applyStoreMocks({
+      detail: mockMarketplaceDetail,
+      content: mockMarketplaceContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::marketplace::frontend-design"
+          variant="page"
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockLoadCachedExplanation).toHaveBeenCalledWith(
+        "claude-code::marketplace::frontend-design",
+        "zh"
+      );
+    });
+  });
+
+  it("uses the resolved Claude detail row id for cached explanation lookup when rowId is omitted", async () => {
+    applyStoreMocks({
+      detail: mockClaudeUserDetail,
+      content: mockUserContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          variant="page"
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockLoadCachedExplanation).toHaveBeenCalledWith(
+        "claude-code::user::frontend-design",
+        "zh"
+      );
+    });
+  });
+
   it("shows cached AI explanation in AI Explanation tab", async () => {
     applyStoreMocks({ explanation: "这是缓存的技能解释。" });
     render(
@@ -615,6 +664,35 @@ describe("SkillDetailView", () => {
     });
   });
 
+  it("calls generateExplanation with the selected Claude row id", async () => {
+    applyStoreMocks({
+      detail: mockMarketplaceDetail,
+      content: mockMarketplaceContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::marketplace::frontend-design"
+          variant="page"
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /AI 解释/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /生成解释/i })[0]);
+
+    await waitFor(() => {
+      expect(mockGenerateExplanation).toHaveBeenCalledWith(
+        "claude-code::marketplace::frontend-design",
+        mockMarketplaceContent,
+        "zh"
+      );
+    });
+  });
+
   it("calls refreshExplanation when cached explanation exists", async () => {
     applyStoreMocks({ explanation: "这是缓存的技能解释。" });
     render(
@@ -627,6 +705,35 @@ describe("SkillDetailView", () => {
     fireEvent.click(screen.getByRole("button", { name: /重新生成/i }));
     await waitFor(() => {
       expect(mockRefreshExplanation).toHaveBeenCalledWith("frontend-design", mockContent, "zh");
+    });
+  });
+
+  it("calls refreshExplanation with the resolved Claude row id", async () => {
+    applyStoreMocks({
+      detail: mockClaudeUserDetail,
+      content: mockUserContent,
+      explanation: "这是用户来源缓存的技能解释。",
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          variant="page"
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /AI 解释/i }));
+    fireEvent.click(screen.getByRole("button", { name: /重新生成/i }));
+
+    await waitFor(() => {
+      expect(mockRefreshExplanation).toHaveBeenCalledWith(
+        "claude-code::user::frontend-design",
+        mockUserContent,
+        "zh"
+      );
     });
   });
 

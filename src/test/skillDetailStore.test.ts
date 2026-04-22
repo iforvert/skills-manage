@@ -639,6 +639,54 @@ describe("skillDetailStore", () => {
     expect(state.isExplanationStreaming).toBe(false);
   });
 
+  it("loads cached explanations with a row-aware Claude key", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce("Marketplace-specific explanation");
+
+    await useSkillDetailStore
+      .getState()
+      .loadCachedExplanation("claude-code::marketplace::frontend-design", "zh");
+
+    expect(invoke).toHaveBeenCalledWith("get_skill_explanation", {
+      skillId: "claude-code::marketplace::frontend-design",
+      lang: "zh",
+    });
+    expect(useSkillDetailStore.getState().explanation).toBe(
+      "Marketplace-specific explanation"
+    );
+  });
+
+  it("generates explanations with a row-aware Claude key", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await useSkillDetailStore
+      .getState()
+      .generateExplanation(
+        "claude-code::marketplace::frontend-design",
+        mockContent,
+        "zh"
+      );
+
+    expect(invoke).toHaveBeenCalledWith("explain_skill_stream", {
+      skillId: "claude-code::marketplace::frontend-design",
+      content: mockContent,
+      lang: "zh",
+    });
+  });
+
+  it("refreshes explanations with a row-aware Claude key", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await useSkillDetailStore
+      .getState()
+      .refreshExplanation("claude-code::user::frontend-design", mockContent, "zh");
+
+    expect(invoke).toHaveBeenCalledWith("refresh_skill_explanation", {
+      skillId: "claude-code::user::frontend-design",
+      content: mockContent,
+      lang: "zh",
+    });
+  });
+
   it("enters loading state immediately for cached explanation lookup and ignores stale responses", async () => {
     let resolveFirst!: (value: string | null) => void;
     let resolveSecond!: (value: string | null) => void;

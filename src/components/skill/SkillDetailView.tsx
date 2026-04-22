@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Ref, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -289,6 +289,12 @@ export function SkillDetailView({
     () => (skillId ? { skillId, agentId, rowId } : null),
     [skillId, agentId, rowId]
   );
+  const explanationRequestKey = useMemo(() => {
+    if (!skillId) {
+      return null;
+    }
+    return detail?.row_id ?? rowId ?? skillId;
+  }, [detail?.row_id, rowId, skillId]);
 
   // Unified accessors
   const content = isFileMode ? fileContent : storeContent;
@@ -341,11 +347,11 @@ export function SkillDetailView({
     };
   }, [detailRequest, loadDetail, reset]);
 
-  useEffect(() => {
-    if (detailRequest?.skillId && storeContent) {
-      loadCachedExplanation(detailRequest.skillId, i18n.language);
+  useLayoutEffect(() => {
+    if (explanationRequestKey && storeContent) {
+      loadCachedExplanation(explanationRequestKey, i18n.language);
     }
-  }, [detailRequest, storeContent, i18n.language, loadCachedExplanation]);
+  }, [explanationRequestKey, storeContent, i18n.language, loadCachedExplanation]);
 
   // ── Derived values ───────────────────────────────────────────────────────
 
@@ -407,8 +413,8 @@ export function SkillDetailView({
         .finally(() => setFileIsExplaining(false));
       return;
     }
-    if (skillId && content) {
-      generateExplanation(skillId, content, i18n.language);
+    if (explanationRequestKey && content) {
+      generateExplanation(explanationRequestKey, content, i18n.language);
     }
   }
 
@@ -417,8 +423,8 @@ export function SkillDetailView({
       handleGenerateExplanation();
       return;
     }
-    if (skillId && content) {
-      refreshExplanation(skillId, content, i18n.language);
+    if (explanationRequestKey && content) {
+      refreshExplanation(explanationRequestKey, content, i18n.language);
     }
   }
 
