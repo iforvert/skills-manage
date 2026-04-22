@@ -27,17 +27,19 @@ None.
 3. Keep one Claude platform surface. Do not introduce a second Claude platform entry or Discover-style escape hatch.
 4. Make source origin explicit in the UI (`user` vs `marketplace`). Do not reuse install/link indicators as the source marker.
 5. Marketplace rows must stay visibly read-only on both list and detail surfaces, and normal Claude user rows must remain manageable beside them.
-6. If duplicate rows exist for one logical skill, preserve row-specific identity through:
+6. When a feature claims the detail surface is source-aware, verify the full detail experience for duplicate Claude rows: metadata, markdown content, management affordances, and the AI Explanation tab / cached explanation state must all follow the selected row.
+7. If duplicate rows exist for one logical skill, preserve row-specific identity through:
    - list rendering
    - detail open/close
    - focus restoration
    - rescan refreshes
-7. Run verification commands from `.factory/services.yaml` relevant to your scope:
+8. For native Tauri validation, use the mission guidance plus `.factory/library/user-testing.md` as the canonical recipe for isolated HOME launches, screenshots, and known automation limits. Do not rediscover the native validation approach ad hoc unless the documented path fails.
+9. Run verification commands from `.factory/services.yaml` relevant to your scope:
    - `test-frontend-targeted`
    - `typecheck`
    - `lint`
-8. Perform a native Tauri check with the isolated mission HOME when your feature changes user-visible list/detail behavior. Browser-only verification is insufficient for final sign-off.
-9. In the handoff, explicitly state whether marketplace rows are visibly read-only and whether duplicate-source switching updates the full detail surface.
+10. Perform a native Tauri check with the isolated mission HOME when your feature changes user-visible list/detail behavior. Browser-only verification is insufficient for final sign-off.
+11. In the handoff, explicitly state whether marketplace rows are visibly read-only and whether duplicate-source switching updates the full detail surface, including any explanation-tab behavior touched by the feature.
 
 ## Example Handoff
 
