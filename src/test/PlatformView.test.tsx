@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import {
   MemoryRouter,
   Route,
@@ -59,6 +59,10 @@ import { usePlatformStore } from "../stores/platformStore";
 import { useSkillStore } from "../stores/skillStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 import * as tauriBridge from "@/lib/tauri";
+
+const userSourceText = /用户来源|User source/i;
+const marketplaceSourceText = /市场来源|Marketplace source/i;
+const readOnlyText = /只读|Read-only/i;
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -136,6 +140,37 @@ const mockDuplicateClaudeSkills: ScannedSkill[] = [
     id: "shared-skill",
     row_id: "claude-code::marketplace::shared-skill",
     name: "shared-skill",
+    description: "Marketplace copy",
+    file_path: "~/.claude/plugins/marketplaces/publisher/shared-skill/SKILL.md",
+    dir_path: "~/.claude/plugins/marketplaces/publisher/shared-skill",
+    link_type: "native",
+    is_central: false,
+    source_kind: "marketplace",
+    source_root: "~/.claude/plugins/marketplaces/publisher",
+    is_read_only: true,
+    conflict_count: 2,
+  },
+];
+
+const mockDuplicateClaudeSkillsWithDistinctIds: ScannedSkill[] = [
+  {
+    id: "shared-skill-id",
+    row_id: "claude-code::user::shared-skill-id",
+    name: "Shared skill",
+    description: "User-source copy",
+    file_path: "~/.claude/skills/shared-skill/SKILL.md",
+    dir_path: "~/.claude/skills/shared-skill",
+    link_type: "native",
+    is_central: false,
+    source_kind: "user",
+    source_root: "~/.claude/skills",
+    is_read_only: false,
+    conflict_count: 2,
+  },
+  {
+    id: "shared-skill-id",
+    row_id: "claude-code::marketplace::shared-skill-id",
+    name: "Shared skill",
     description: "Marketplace copy",
     file_path: "~/.claude/plugins/marketplaces/publisher/shared-skill/SKILL.md",
     dir_path: "~/.claude/plugins/marketplaces/publisher/shared-skill",
@@ -458,6 +493,72 @@ describe("PlatformView", () => {
     expect(
       screen.getByText("drawer-row:claude-code::marketplace::shared-skill")
     ).toBeInTheDocument();
+  });
+
+  it("shows duplicate Claude rows with explicit source markers and read-only list treatment", () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockDuplicateClaudeSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    expect(screen.getAllByRole("button", { name: /查看 shared-skill 的详情/i })).toHaveLength(2);
+
+    const userBadge = screen.getByText(userSourceText);
+    const marketplaceBadge = screen.getByText(marketplaceSourceText);
+    const readOnlyBadge = screen.getByText(readOnlyText);
+
+    const userCard = userBadge.closest(".rounded-xl");
+    const marketplaceCard = marketplaceBadge.closest(".rounded-xl");
+
+    expect(userCard).not.toBeNull();
+    expect(marketplaceCard).not.toBeNull();
+    expect(readOnlyBadge.closest(".rounded-xl")).toBe(marketplaceCard);
+
+    if (!userCard || !marketplaceCard) {
+      return;
+    }
+
+    expect(
+      within(userCard as HTMLElement).getByRole("button", {
+        name: /将 shared-skill 安装到平台/i,
+      })
+    ).toBeInTheDocument();
+    expect(
+      within(marketplaceCard as HTMLElement).queryByRole("button", {
+        name: /将 shared-skill 安装到平台/i,
+      })
+    ).not.toBeInTheDocument();
+  });
+
+  it("searching by duplicated Claude skill id keeps both source rows and badges visible", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockDuplicateClaudeSkillsWithDistinctIds },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    fireEvent.change(screen.getByPlaceholderText(/搜索技能/), {
+      target: { value: "shared-skill-id" },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("button", { name: /查看 Shared skill 的详情/i })
+      ).toHaveLength(2);
+    });
+
+    expect(screen.getByText(userSourceText)).toBeInTheDocument();
+    expect(screen.getByText(marketplaceSourceText)).toBeInTheDocument();
+    expect(screen.getByText(readOnlyText)).toBeInTheDocument();
   });
 
   it("preserves platform search and scroll state when closing the drawer and restores focus", async () => {

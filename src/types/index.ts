@@ -33,6 +33,8 @@ export interface ScanResult {
   skills_by_agent: Record<string, number>;
 }
 
+export type ClaudeSourceKind = "user" | "marketplace";
+
 export interface ScannedSkill {
   id: string;
   row_id?: string;
@@ -43,7 +45,7 @@ export interface ScannedSkill {
   link_type: string;
   symlink_target?: string;
   is_central: boolean;
-  source_kind?: string | null;
+  source_kind?: ClaudeSourceKind | null;
   source_root?: string | null;
   is_read_only?: boolean;
   conflict_group?: string | null;
@@ -77,7 +79,7 @@ export interface SkillInstallation {
 export interface SkillDetail extends Omit<Skill, "content"> {
   row_id?: string;
   dir_path?: string;
-  source_kind?: string | null;
+  source_kind?: ClaudeSourceKind | null;
   source_root?: string | null;
   is_read_only?: boolean;
   conflict_group?: string | null;

@@ -10,12 +10,13 @@ import {
   ChevronRight,
   X,
   Loader2,
+  Lock,
 } from "lucide-react";
 import type { MouseEventHandler, Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
-import { AgentWithStatus } from "@/types";
+import type { AgentWithStatus, ClaudeSourceKind } from "@/types";
 import { cn } from "@/lib/utils";
 
 // ─── Platform Toggle Icon (internal) ──────────────────────────────────────────
@@ -81,6 +82,8 @@ export interface UnifiedSkillCardProps {
 
   // ── platform variant ──
   sourceType?: "symlink" | "copy" | "native";
+  originKind?: ClaudeSourceKind | null;
+  isReadOnly?: boolean;
 
   // ── marketplace variant ──
   isInstalled?: boolean;
@@ -113,6 +116,8 @@ export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
     projectBadge,
     platformIcons,
     sourceType,
+    originKind,
+    isReadOnly,
     isInstalled,
     tags,
     publisher,
@@ -277,7 +282,10 @@ export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
           )}
 
           {/* Row 3: Info badges */}
-          <div className="flex items-center gap-3 empty:hidden">
+          <div className="flex flex-wrap items-center gap-1.5 empty:hidden">
+            {originKind && <SourceOriginBadge originKind={originKind} />}
+            {isReadOnly && <ReadOnlyBadge />}
+
             {/* Source indicator (platform) */}
             {sourceType && <SourceIndicator sourceType={sourceType} />}
 
@@ -374,10 +382,17 @@ export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
 // ─── Source Indicator (internal) ──────────────────────────────────────────────
 
 function SourceIndicator({ sourceType }: { sourceType: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isSymlink = sourceType === "symlink";
+  const isNative = sourceType === "native";
   const primaryLabel = isSymlink ? t("platform.sourceCentral") : t("platform.sourceStandalone");
-  const secondaryLabel = isSymlink ? t("platform.sourceSymlinkLabel") : t("platform.sourceCopyLabel");
+  const secondaryLabel = isSymlink
+    ? t("platform.sourceSymlinkLabel")
+    : isNative
+      ? t("platform.sourceNativeLabel", {
+          defaultValue: i18n.language.startsWith("zh") ? "原生" : "native",
+        })
+      : t("platform.sourceCopyLabel");
 
   return (
     <div
@@ -394,5 +409,42 @@ function SourceIndicator({ sourceType }: { sourceType: string }) {
         <span>{secondaryLabel}</span>
       </div>
     </div>
+  );
+}
+
+function SourceOriginBadge({ originKind }: { originKind: ClaudeSourceKind }) {
+  const { t, i18n } = useTranslation();
+  const isMarketplace = originKind === "marketplace";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+        isMarketplace
+          ? "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300"
+          : "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-300"
+      )}
+    >
+      {isMarketplace
+        ? t("platform.originMarketplace", {
+            defaultValue: i18n.language.startsWith("zh") ? "市场来源" : "Marketplace source",
+          })
+        : t("platform.originUser", {
+            defaultValue: i18n.language.startsWith("zh") ? "用户来源" : "User source",
+          })}
+    </span>
+  );
+}
+
+function ReadOnlyBadge() {
+  const { t, i18n } = useTranslation();
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
+      <Lock className="size-3 shrink-0" />
+      {t("platform.readOnly", {
+        defaultValue: i18n.language.startsWith("zh") ? "只读" : "Read-only",
+      })}
+    </span>
   );
 }

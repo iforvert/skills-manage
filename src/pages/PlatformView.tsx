@@ -111,6 +111,7 @@ export function PlatformView() {
     const q = searchQuery.toLowerCase();
     return skills.filter(
       (skill) =>
+        skill.id.toLowerCase().includes(q) ||
         skill.name.toLowerCase().includes(q) ||
         skill.description?.toLowerCase().includes(q)
     );
@@ -183,8 +184,14 @@ export function PlatformView() {
                 name={skill.name}
                 description={skill.description}
                 sourceType={skill.link_type as "symlink" | "copy" | "native"}
+                originKind={skill.source_kind ?? null}
+                isReadOnly={skill.is_read_only ?? false}
                 onDetail={() => handleOpenDrawer(skill)}
-                onInstallTo={() => handleInstallClick(skill.id)}
+                onInstallTo={
+                  skill.is_read_only
+                    ? undefined
+                    : () => handleInstallClick(skill.id)
+                }
                 detailButtonRef={(node) => setDetailButtonRef(getSkillRowKey(skill), node)}
               />
             ))}
