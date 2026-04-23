@@ -1,4 +1,4 @@
-import { Radar, Loader2, AlertTriangle } from "lucide-react";
+import { Radar, Loader2, AlertTriangle, FolderPlus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -14,6 +14,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useDiscoverStore } from "@/stores/discoverStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { ScanRoot } from "@/types";
+import { open } from "@tauri-apps/plugin-dialog";
+import { useState } from "react";
 
 // ─── DiscoverConfigDialog ────────────────────────────────────────────────────
 
@@ -29,14 +31,20 @@ export function DiscoverConfigDialog({ open, onOpenChange }: DiscoverConfigDialo
   const isLoadingRoots = useDiscoverStore((s) => s.isLoadingRoots);
   const loadScanRoots = useDiscoverStore((s) => s.loadScanRoots);
   const setScanRootEnabled = useDiscoverStore((s) => s.setScanRootEnabled);
+  const addCustomScanRoot = useDiscoverStore((s) => s.addCustomScanRoot);
+  const removeCustomScanRoot = useDiscoverStore((s) => s.removeCustomScanRoot);
   const startScan = useDiscoverStore((s) => s.startScan);
 
   const agents = usePlatformStore((s) => s.agents);
+
+  const [isAddingDir, setIsAddingDir] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   // Load roots when dialog opens.
   const handleOpenChange = (open: boolean) => {
     if (open) {
       loadScanRoots();
+      setAddError(null);
     }
     onOpenChange(open);
   };
@@ -53,6 +61,33 @@ export function DiscoverConfigDialog({ open, onOpenChange }: DiscoverConfigDialo
     });
 
   const enabledCount = scanRoots.filter((r) => r.enabled && r.exists).length;
+
+  async function handleAddDirectory() {
+    setIsAddingDir(true);
+    setAddError(null);
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: t("discover.selectDirectory"),
+      });
+      if (selected) {
+        await addCustomScanRoot(selected);
+      }
+    } catch (err) {
+      setAddError(String(err));
+    } finally {
+      setIsAddingDir(false);
+    }
+  }
+
+  async function handleRemoveDirectory(path: string) {
+    try {
+      await removeCustomScanRoot(path);
+    } catch (err) {
+      // Error is already handled in the store
+    }
+  }
 
   function handleStartScan() {
     // Close the dialog IMMEDIATELY so the user can see the ProgressView
@@ -91,17 +126,38 @@ export function DiscoverConfigDialog({ open, onOpenChange }: DiscoverConfigDialo
                 No candidate directories found.
               </p>
             ) : (
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {scanRoots.map((root) => (
-                  <ScanRootRow
-                    key={root.path}
-                    root={root}
-                    onToggle={(enabled) =>
-                      setScanRootEnabled(root.path, enabled)
-                    }
-                  />
-                ))}
-              </div>
+              <>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {scanRoots.map((root) => (
+                    <ScanRootRow
+                      key={root.path}
+                      root={root}
+                      onToggle={(enabled) =>
+                        setScanRootEnabled(root.path, enabled)
+                      }
+                      onRemove={root.is_custom ? () => handleRemoveDirectory(root.path) : undefined}
+                    />
+                  ))}
+                </div>
+                {/* Add custom directory button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddDirectory}
+                  disabled={isAddingDir}
+                  className="w-full mt-2"
+                >
+                  {isAddingDir ? (
+                    <Loader2 className="size-3.5 animate-spin mr-1" />
+                  ) : (
+                    <FolderPlus className="size-3.5 mr-1" />
+                  )}
+                  {t("discover.addDirectory")}
+                </Button>
+                {addError && (
+                  <p className="text-xs text-destructive">{addError}</p>
+                )}
+              </>
             )}
           </div>
 
@@ -158,12 +214,14 @@ export function DiscoverConfigDialog({ open, onOpenChange }: DiscoverConfigDialo
 function ScanRootRow({
   root,
   onToggle,
+  onRemove,
 }: {
   root: ScanRoot;
   onToggle: (enabled: boolean) => void;
+  onRemove?: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-hover-bg/20 cursor-pointer">
+    <div className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-hover-bg/20">
       <Checkbox
         checked={root.enabled}
         onCheckedChange={(checked) => onToggle(!!checked)}
@@ -180,6 +238,16 @@ function ScanRootRow({
       <span className="text-xs text-muted-foreground shrink-0">
         {root.label}
       </span>
+      {root.is_custom && onRemove && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRemove}
+          className="size-6 p-0 shrink-0"
+        >
+          <X className="size-3" />
+        </Button>
+      )}
     </div>
   );
 }

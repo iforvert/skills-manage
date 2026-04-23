@@ -326,6 +326,8 @@
     "discoverLabel": "Discover project skills",
     "scanRoots": "Scan Roots",
     "scanRootsDesc": "Select directories to scan for project-level skills.",
+    "addDirectory": "Add Directory",
+    "selectDirectory": "Select Directory to Scan",
     "lookingFor": "Looking for:",
     "startScan": "Start Scan",
     "scanning": "Scanning...",

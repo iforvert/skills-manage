@@ -134,6 +134,7 @@ export interface ScanRoot {
   label: string;
   exists: boolean;
   enabled: boolean;
+  is_custom: boolean;
 }
 
 export interface DiscoveredSkill {

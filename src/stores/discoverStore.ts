@@ -65,6 +65,8 @@ interface DiscoverState {
   // Actions
   loadScanRoots: () => Promise<void>;
   setScanRootEnabled: (path: string, enabled: boolean) => Promise<void>;
+  addCustomScanRoot: (path: string) => Promise<ScanRoot>;
+  removeCustomScanRoot: (path: string) => Promise<void>;
   startScan: () => Promise<void>;
   stopScan: () => Promise<void>;
   loadDiscoveredSkills: () => Promise<void>;
@@ -193,6 +195,35 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         ),
         error: String(err),
       }));
+    }
+  },
+
+  addCustomScanRoot: async (path: string) => {
+    set({ isLoadingRoots: true, error: null });
+    try {
+      const newRoot = await invoke<ScanRoot>("add_custom_scan_root", { path });
+      set((state) => ({
+        scanRoots: [...state.scanRoots, newRoot],
+        isLoadingRoots: false,
+      }));
+      return newRoot;
+    } catch (err) {
+      set({ error: String(err), isLoadingRoots: false });
+      throw err;
+    }
+  },
+
+  removeCustomScanRoot: async (path: string) => {
+    // Optimistically remove from local state.
+    set((state) => ({
+      scanRoots: state.scanRoots.filter((r) => r.path !== path),
+    }));
+    try {
+      await invoke("remove_custom_scan_root", { path });
+    } catch (err) {
+      // Reload to revert on failure.
+      set({ error: String(err) });
+      await get().loadScanRoots();
     }
   },
 
