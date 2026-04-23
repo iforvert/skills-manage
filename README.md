@@ -15,6 +15,7 @@
 ## Highlights
 
 - Central skill library plus per-platform install and uninstall flows.
+- Claude Code can surface native skills and read-only marketplace plugin skills in one platform view.
 - Full skill detail view with Markdown preview, raw source view, and AI explanation generation.
 - Collections for organizing skills and batch-installing them to platforms.
 - Discover scan for project-level skill libraries on local disks.
@@ -105,6 +106,8 @@ Then launch the app again from Finder. If your app is stored somewhere else, rep
 | Lobster | AutoClaw | `~/.openclaw-autoclaw/skills/` |
 | Lobster | WorkBuddy (打工搭子) | `~/.workbuddy/skills-marketplace/skills/` |
 | Central | Central Skills | `~/.agents/skills/` |
+
+> Note: Claude Code also surfaces marketplace plugin directories under `~/.claude/plugins/marketplaces/*` as read-only rows in the Claude view. Those entries are display-only and are not managed like native skills in `~/.claude/skills/`.
 
 Custom platforms can be added through Settings.
 

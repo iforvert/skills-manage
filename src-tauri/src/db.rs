@@ -4,8 +4,10 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
     FromRow, Row, SqlitePool,
 };
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
+
+use crate::path_utils::{path_to_string, resolve_home_dir};
 
 pub type DbPool = SqlitePool;
 
@@ -33,6 +35,23 @@ pub struct SkillInstallation {
     pub symlink_target: Option<String>,
     /// ISO 8601 timestamp of when the skill was first installed.
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct AgentSkillObservation {
+    pub row_id: String,
+    pub agent_id: String,
+    pub skill_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub file_path: String,
+    pub dir_path: String,
+    pub source_kind: String,
+    pub source_root: String,
+    pub link_type: String,
+    pub symlink_target: Option<String>,
+    pub is_read_only: bool,
+    pub scanned_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -121,6 +140,27 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
             symlink_target TEXT,
             created_at     TEXT NOT NULL DEFAULT (datetime('now')),
             PRIMARY KEY (skill_id, agent_id)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS agent_skill_observations (
+            row_id         TEXT PRIMARY KEY,
+            agent_id       TEXT NOT NULL,
+            skill_id       TEXT NOT NULL,
+            name           TEXT NOT NULL,
+            description    TEXT,
+            file_path      TEXT NOT NULL,
+            dir_path       TEXT NOT NULL,
+            source_kind    TEXT NOT NULL,
+            source_root    TEXT NOT NULL,
+            link_type      TEXT NOT NULL,
+            symlink_target TEXT,
+            is_read_only   BOOLEAN NOT NULL DEFAULT 0,
+            scanned_at     TEXT NOT NULL
         )",
     )
     .execute(pool)
@@ -542,14 +582,15 @@ async fn ensure_column(
 
 /// Returns the list of built-in agents using the current user's home directory.
 pub fn builtin_agents() -> Vec<Agent> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let home = resolve_home_dir();
+    let in_home = |relative: &str| path_to_string(&home.join(relative));
     vec![
         // ── Coding platforms ─────────────────────────────────────────────────
         Agent {
             id: "claude-code".to_string(),
             display_name: "Claude Code".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.claude/skills", home),
+            global_skills_dir: in_home(".claude/skills"),
             project_skills_dir: None,
             icon_name: Some("claude".to_string()),
             is_detected: false,
@@ -560,7 +601,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "codex".to_string(),
             display_name: "Codex CLI".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.agents/skills", home),
+            global_skills_dir: in_home(".agents/skills"),
             project_skills_dir: None,
             icon_name: Some("codex".to_string()),
             is_detected: false,
@@ -571,7 +612,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "cursor".to_string(),
             display_name: "Cursor".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.cursor/skills", home),
+            global_skills_dir: in_home(".cursor/skills"),
             project_skills_dir: None,
             icon_name: Some("cursor".to_string()),
             is_detected: false,
@@ -582,7 +623,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "gemini-cli".to_string(),
             display_name: "Gemini CLI".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.gemini/skills", home),
+            global_skills_dir: in_home(".gemini/skills"),
             project_skills_dir: None,
             icon_name: Some("gemini".to_string()),
             is_detected: false,
@@ -593,7 +634,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "trae".to_string(),
             display_name: "Trae".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.trae/skills", home),
+            global_skills_dir: in_home(".trae/skills"),
             project_skills_dir: None,
             icon_name: Some("trae".to_string()),
             is_detected: false,
@@ -604,7 +645,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "factory-droid".to_string(),
             display_name: "Factory Droid".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.factory/skills", home),
+            global_skills_dir: in_home(".factory/skills"),
             project_skills_dir: None,
             icon_name: Some("factory".to_string()),
             is_detected: false,
@@ -615,7 +656,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "junie".to_string(),
             display_name: "Junie".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.junie/skills", home),
+            global_skills_dir: in_home(".junie/skills"),
             project_skills_dir: None,
             icon_name: Some("junie".to_string()),
             is_detected: false,
@@ -626,7 +667,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "qwen".to_string(),
             display_name: "Qwen".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.qwen/skills", home),
+            global_skills_dir: in_home(".qwen/skills"),
             project_skills_dir: None,
             icon_name: Some("qwen".to_string()),
             is_detected: false,
@@ -637,7 +678,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "trae-cn".to_string(),
             display_name: "Trae CN".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.trae-cn/skills", home),
+            global_skills_dir: in_home(".trae-cn/skills"),
             project_skills_dir: None,
             icon_name: Some("trae-cn".to_string()),
             is_detected: false,
@@ -648,7 +689,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "windsurf".to_string(),
             display_name: "Windsurf".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.windsurf/skills", home),
+            global_skills_dir: in_home(".windsurf/skills"),
             project_skills_dir: None,
             icon_name: Some("windsurf".to_string()),
             is_detected: false,
@@ -659,7 +700,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "qoder".to_string(),
             display_name: "Qoder".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.qoder/skills", home),
+            global_skills_dir: in_home(".qoder/skills"),
             project_skills_dir: None,
             icon_name: Some("qoder".to_string()),
             is_detected: false,
@@ -670,7 +711,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "augment".to_string(),
             display_name: "Augment".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.augment/skills", home),
+            global_skills_dir: in_home(".augment/skills"),
             project_skills_dir: None,
             icon_name: Some("augment".to_string()),
             is_detected: false,
@@ -681,7 +722,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "opencode".to_string(),
             display_name: "OpenCode".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.opencode/skills", home),
+            global_skills_dir: in_home(".opencode/skills"),
             project_skills_dir: None,
             icon_name: Some("opencode".to_string()),
             is_detected: false,
@@ -692,7 +733,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "kilocode".to_string(),
             display_name: "KiloCode".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.kilocode/skills", home),
+            global_skills_dir: in_home(".kilocode/skills"),
             project_skills_dir: None,
             icon_name: Some("kilocode".to_string()),
             is_detected: false,
@@ -703,7 +744,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "ob1".to_string(),
             display_name: "OB1".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.ob1/skills", home),
+            global_skills_dir: in_home(".ob1/skills"),
             project_skills_dir: None,
             icon_name: Some("ob1".to_string()),
             is_detected: false,
@@ -714,7 +755,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "amp".to_string(),
             display_name: "Amp".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.amp/skills", home),
+            global_skills_dir: in_home(".amp/skills"),
             project_skills_dir: None,
             icon_name: Some("amp".to_string()),
             is_detected: false,
@@ -725,7 +766,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "kiro".to_string(),
             display_name: "Kiro".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.kiro/skills", home),
+            global_skills_dir: in_home(".kiro/skills"),
             project_skills_dir: None,
             icon_name: Some("kiro".to_string()),
             is_detected: false,
@@ -736,7 +777,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "codebuddy".to_string(),
             display_name: "CodeBuddy".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.codebuddy/skills", home),
+            global_skills_dir: in_home(".codebuddy/skills"),
             project_skills_dir: None,
             icon_name: Some("codebuddy".to_string()),
             is_detected: false,
@@ -747,7 +788,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "hermes".to_string(),
             display_name: "Hermes".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.hermes/skills", home),
+            global_skills_dir: in_home(".hermes/skills"),
             project_skills_dir: None,
             icon_name: Some("hermes".to_string()),
             is_detected: false,
@@ -758,7 +799,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "copilot".to_string(),
             display_name: "Copilot".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.copilot/skills", home),
+            global_skills_dir: in_home(".copilot/skills"),
             project_skills_dir: None,
             icon_name: Some("copilot".to_string()),
             is_detected: false,
@@ -769,7 +810,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "aider".to_string(),
             display_name: "Aider".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.aider/skills", home),
+            global_skills_dir: in_home(".aider/skills"),
             project_skills_dir: None,
             icon_name: Some("aider".to_string()),
             is_detected: false,
@@ -781,7 +822,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "openclaw".to_string(),
             display_name: "OpenClaw".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.openclaw/skills", home),
+            global_skills_dir: in_home(".openclaw/skills"),
             project_skills_dir: None,
             icon_name: Some("openclaw".to_string()),
             is_detected: false,
@@ -792,7 +833,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "qclaw".to_string(),
             display_name: "QClaw".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.qclaw/skills", home),
+            global_skills_dir: in_home(".qclaw/skills"),
             project_skills_dir: None,
             icon_name: Some("qclaw".to_string()),
             is_detected: false,
@@ -803,7 +844,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "easyclaw".to_string(),
             display_name: "EasyClaw".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.easyclaw/skills", home),
+            global_skills_dir: in_home(".easyclaw/skills"),
             project_skills_dir: None,
             icon_name: Some("easyclaw".to_string()),
             is_detected: false,
@@ -814,7 +855,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "autoclaw".to_string(),
             display_name: "AutoClaw".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.openclaw-autoclaw/skills", home),
+            global_skills_dir: in_home(".openclaw-autoclaw/skills"),
             project_skills_dir: None,
             icon_name: Some("autoclaw".to_string()),
             is_detected: false,
@@ -825,7 +866,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "workbuddy".to_string(),
             display_name: "WorkBuddy".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.workbuddy/skills-marketplace/skills", home),
+            global_skills_dir: in_home(".workbuddy/skills-marketplace/skills"),
             project_skills_dir: None,
             icon_name: Some("workbuddy".to_string()),
             is_detected: false,
@@ -837,7 +878,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "central".to_string(),
             display_name: "Central Skills".to_string(),
             category: "central".to_string(),
-            global_skills_dir: format!("{}/.agents/skills", home),
+            global_skills_dir: in_home(".agents/skills"),
             project_skills_dir: None,
             icon_name: Some("central".to_string()),
             is_detected: false,
@@ -886,8 +927,29 @@ pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
+fn observation_to_skill(observation: AgentSkillObservation) -> Skill {
+    Skill {
+        id: observation.skill_id,
+        name: observation.name,
+        description: observation.description,
+        file_path: observation.file_path,
+        canonical_path: None,
+        is_central: false,
+        source: Some(observation.link_type),
+        content: None,
+        scanned_at: observation.scanned_at,
+    }
+}
+
 /// Retrieve all skills installed for a given agent.
 pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Skill>, String> {
+    if agent_id == "claude-code" {
+        let observations = get_agent_skill_observations(pool, agent_id).await?;
+        if !observations.is_empty() {
+            return Ok(observations.into_iter().map(observation_to_skill).collect());
+        }
+    }
+
     sqlx::query_as::<_, Skill>(
         "SELECT s.* FROM skills s
          JOIN skill_installations si ON s.id = si.skill_id
@@ -907,6 +969,8 @@ pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Sk
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SkillForAgent {
     pub id: String,
+    /// Stable row identity for list/detail routing.
+    pub row_id: String,
     pub name: String,
     pub description: Option<String>,
     /// Absolute path to the `SKILL.md` file.
@@ -919,6 +983,34 @@ pub struct SkillForAgent {
     /// Symlink target path, if `link_type` is "symlink".
     pub symlink_target: Option<String>,
     pub is_central: bool,
+    pub source_kind: Option<String>,
+    pub source_root: Option<String>,
+    pub is_read_only: bool,
+    pub conflict_group: Option<String>,
+    pub conflict_count: i64,
+}
+
+fn observation_to_skill_for_agent(observation: AgentSkillObservation) -> SkillForAgent {
+    SkillForAgent {
+        id: observation.skill_id,
+        row_id: observation.row_id,
+        name: observation.name,
+        description: observation.description,
+        file_path: observation.file_path,
+        dir_path: observation.dir_path,
+        link_type: observation.link_type,
+        symlink_target: observation.symlink_target,
+        is_central: false,
+        source_kind: Some(observation.source_kind),
+        source_root: Some(observation.source_root),
+        is_read_only: observation.is_read_only,
+        conflict_group: None,
+        conflict_count: 0,
+    }
+}
+
+fn claude_conflict_group(agent_id: &str, skill_id: &str) -> String {
+    format!("{agent_id}::{skill_id}")
 }
 
 /// Retrieve skills installed for a given agent, enriched with installation
@@ -928,15 +1020,109 @@ pub async fn get_skills_for_agent(
     pool: &DbPool,
     agent_id: &str,
 ) -> Result<Vec<SkillForAgent>, String> {
+    if agent_id == "claude-code" {
+        let observations = get_agent_skill_observations(pool, agent_id).await?;
+        if !observations.is_empty() {
+            let mut conflict_counts: HashMap<String, i64> = HashMap::new();
+            for observation in &observations {
+                *conflict_counts
+                    .entry(observation.skill_id.clone())
+                    .or_insert(0) += 1;
+            }
+
+            return Ok(observations
+                .into_iter()
+                .map(|observation| {
+                    let conflict_count = conflict_counts
+                        .get(&observation.skill_id)
+                        .copied()
+                        .unwrap_or(0);
+                    let mut skill = observation_to_skill_for_agent(observation);
+                    if conflict_count > 1 {
+                        skill.conflict_group = Some(claude_conflict_group(agent_id, &skill.id));
+                        skill.conflict_count = conflict_count;
+                    }
+                    skill
+                })
+                .collect());
+        }
+    }
+
     sqlx::query_as::<_, SkillForAgent>(
-        "SELECT s.id, s.name, s.description, s.file_path,
+        "SELECT s.id,
+                s.id AS row_id,
+                s.name,
+                s.description,
+                s.file_path,
                 si.installed_path AS dir_path,
                 si.link_type,
                 si.symlink_target,
-                s.is_central
+                s.is_central,
+                NULL AS source_kind,
+                NULL AS source_root,
+                0 AS is_read_only,
+                NULL AS conflict_group,
+                0 AS conflict_count
          FROM skills s
          JOIN skill_installations si ON s.id = si.skill_id
          WHERE si.agent_id = ?",
+    )
+    .bind(agent_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn upsert_agent_skill_observation(
+    pool: &DbPool,
+    observation: &AgentSkillObservation,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO agent_skill_observations
+         (row_id, agent_id, skill_id, name, description, file_path, dir_path,
+          source_kind, source_root, link_type, symlink_target, is_read_only, scanned_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(row_id) DO UPDATE SET
+           agent_id       = excluded.agent_id,
+           skill_id       = excluded.skill_id,
+           name           = excluded.name,
+           description    = excluded.description,
+           file_path      = excluded.file_path,
+           dir_path       = excluded.dir_path,
+           source_kind    = excluded.source_kind,
+           source_root    = excluded.source_root,
+           link_type      = excluded.link_type,
+           symlink_target = excluded.symlink_target,
+           is_read_only   = excluded.is_read_only,
+           scanned_at     = excluded.scanned_at",
+    )
+    .bind(&observation.row_id)
+    .bind(&observation.agent_id)
+    .bind(&observation.skill_id)
+    .bind(&observation.name)
+    .bind(&observation.description)
+    .bind(&observation.file_path)
+    .bind(&observation.dir_path)
+    .bind(&observation.source_kind)
+    .bind(&observation.source_root)
+    .bind(&observation.link_type)
+    .bind(&observation.symlink_target)
+    .bind(observation.is_read_only)
+    .bind(&observation.scanned_at)
+    .execute(pool)
+    .await
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+pub async fn get_agent_skill_observations(
+    pool: &DbPool,
+    agent_id: &str,
+) -> Result<Vec<AgentSkillObservation>, String> {
+    sqlx::query_as::<_, AgentSkillObservation>(
+        "SELECT * FROM agent_skill_observations
+         WHERE agent_id = ?
+         ORDER BY name, dir_path",
     )
     .bind(agent_id)
     .fetch_all(pool)
@@ -1054,6 +1240,37 @@ pub async fn delete_stale_skill_installations(
     let mut q = sqlx::query(&sql).bind(agent_id);
     for id in found_skill_ids {
         q = q.bind(id.as_str());
+    }
+    q.execute(pool).await.map(|_| ()).map_err(|e| e.to_string())
+}
+
+pub async fn delete_stale_agent_skill_observations(
+    pool: &DbPool,
+    agent_id: &str,
+    found_row_ids: &[String],
+) -> Result<(), String> {
+    if found_row_ids.is_empty() {
+        return sqlx::query("DELETE FROM agent_skill_observations WHERE agent_id = ?")
+            .bind(agent_id)
+            .execute(pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+    }
+
+    let placeholders = found_row_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "DELETE FROM agent_skill_observations WHERE agent_id = ? AND row_id NOT IN ({})",
+        placeholders
+    );
+
+    let mut q = sqlx::query(&sql).bind(agent_id);
+    for row_id in found_row_ids {
+        q = q.bind(row_id.as_str());
     }
     q.execute(pool).await.map(|_| ()).map_err(|e| e.to_string())
 }
@@ -1364,7 +1581,10 @@ pub async fn get_collection_skills(
 }
 
 /// Retrieve all collections that contain a given skill.
-pub async fn get_skill_collections(pool: &DbPool, skill_id: &str) -> Result<Vec<Collection>, String> {
+pub async fn get_skill_collections(
+    pool: &DbPool,
+    skill_id: &str,
+) -> Result<Vec<Collection>, String> {
     sqlx::query_as::<_, Collection>(
         "SELECT c.* FROM collections c
          JOIN collection_skills cs ON c.id = cs.collection_id
@@ -1602,10 +1822,11 @@ mod tests {
     async fn test_init_creates_all_tables() {
         let pool = setup_test_db().await;
 
-        // Verify all 7 tables exist by counting rows (empty is fine)
+        // Verify all core tables exist by counting rows (empty is fine)
         let tables = [
             "skills",
             "skill_installations",
+            "agent_skill_observations",
             "agents",
             "collections",
             "collection_skills",

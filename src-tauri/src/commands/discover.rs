@@ -8,6 +8,7 @@ use serde_json;
 use tauri::{Emitter, State};
 
 use crate::db::{self, DbPool};
+use crate::path_utils::{central_skills_dir, path_to_string, resolve_home_dir};
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -19,7 +20,6 @@ pub struct ScanRoot {
     pub label: String,
     pub exists: bool,
     pub enabled: bool,
-    pub is_custom: bool,
 }
 
 /// A project-level skill discovered during a full-disk scan.
@@ -98,16 +98,16 @@ static SCAN_CANCEL: AtomicBool = AtomicBool::new(false);
 
 /// Returns a list of candidate scan roots, checking which ones exist on disk.
 fn default_scan_roots() -> Vec<ScanRoot> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let home = resolve_home_dir();
     let candidates = vec![
-        (format!("{}/projects", home), "projects"),
-        (format!("{}/Documents", home), "Documents"),
-        (format!("{}/Developer", home), "Developer"),
-        (format!("{}/work", home), "work"),
-        (format!("{}/src", home), "src"),
-        (format!("{}/code", home), "code"),
-        (format!("{}/repos", home), "repos"),
-        (format!("{}/Desktop", home), "Desktop"),
+        (path_to_string(&home.join("projects")), "projects"),
+        (path_to_string(&home.join("Documents")), "Documents"),
+        (path_to_string(&home.join("Developer")), "Developer"),
+        (path_to_string(&home.join("work")), "work"),
+        (path_to_string(&home.join("src")), "src"),
+        (path_to_string(&home.join("code")), "code"),
+        (path_to_string(&home.join("repos")), "repos"),
+        (path_to_string(&home.join("Desktop")), "Desktop"),
         // macOS: scan /Applications for apps with built-in skills (e.g. OpenClaw)
         ("/Applications".to_string(), "Applications"),
     ];
@@ -121,7 +121,6 @@ fn default_scan_roots() -> Vec<ScanRoot> {
                 label: label.to_string(),
                 exists,
                 enabled: exists, // auto-enable roots that exist
-                is_custom: false, // default roots are not custom
             }
         })
         .collect()
@@ -134,13 +133,13 @@ fn platform_skill_patterns(_pool: &DbPool) -> Vec<(String, String, PathBuf)> {
     // (agent_id, display_name, relative_subpath)
     // We compute this synchronously since it only reads from the built-in
     // agent list which is static after init.
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
+    let home = resolve_home_dir();
 
     db::builtin_agents()
         .iter()
         .filter(|a| a.id != "central")
         .filter_map(|a| {
-            let full = crate::commands::linker::expand_tilde(&a.global_skills_dir);
+            let full = PathBuf::from(&a.global_skills_dir);
             // Strip home prefix to get relative path like ".claude/skills"
             let rel = full.strip_prefix(&home).ok()?;
             Some((a.id.clone(), a.display_name.clone(), rel.to_path_buf()))
@@ -415,7 +414,6 @@ pub async fn discover_scan_roots() -> Result<Vec<ScanRoot>, String> {
 ///
 /// Returns auto-detected default roots, then overlays any previously
 /// persisted enabled/disabled states from the settings table.
-/// Includes both default roots and custom user-added roots.
 #[tauri::command]
 pub async fn get_scan_roots(state: State<'_, AppState>) -> Result<Vec<ScanRoot>, String> {
     let pool = &state.db;
@@ -431,27 +429,6 @@ pub async fn get_scan_roots(state: State<'_, AppState>) -> Result<Vec<ScanRoot>,
             if let Some(&enabled) = config.get(&root.path) {
                 root.enabled = enabled;
             }
-        }
-    }
-
-    // Load custom roots from settings.
-    // Stored as JSON array under "discover_custom_scan_roots".
-    if let Some(json) = db::get_setting(pool, "discover_custom_scan_roots").await? {
-        let custom_paths: Vec<String> =
-            serde_json::from_str(&json).map_err(|e| format!("Invalid custom scan roots: {}", e))?;
-        for path in custom_paths {
-            let exists = Path::new(&path).exists();
-            roots.push(ScanRoot {
-                path: path.clone(),
-                label: Path::new(&path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or(&path)
-                    .to_string(),
-                exists,
-                enabled: exists,
-                is_custom: true,
-            });
         }
     }
 
@@ -485,101 +462,6 @@ pub async fn set_scan_root_enabled(
     db::set_setting(pool, "discover_scan_roots_config", &json).await
 }
 
-/// Add a custom scan root directory.
-/// Validates that the path exists and is not already in the list.
-#[tauri::command]
-pub async fn add_custom_scan_root(
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<ScanRoot, String> {
-    let pool = &state.db;
-
-    // Validate path
-    let expanded = crate::commands::linker::expand_tilde(&path);
-    if !expanded.exists() {
-        return Err(format!("Path does not exist: {}", path));
-    }
-
-    let path_str = expanded.to_string_lossy().to_string();
-
-    // Load existing custom roots
-    let mut custom_paths: Vec<String> =
-        match db::get_setting(pool, "discover_custom_scan_roots").await? {
-            Some(json) => serde_json::from_str(&json)
-                .map_err(|e| format!("Invalid custom scan roots: {}", e))?,
-            None => Vec::new(),
-        };
-
-    // Check for duplicates
-    if custom_paths.contains(&path_str) {
-        return Err(format!("Path already in scan roots: {}", path));
-    }
-
-    // Add new path
-    custom_paths.push(path_str.clone());
-
-    // Save to DB
-    let json = serde_json::to_string(&custom_paths)
-        .map_err(|e| format!("Failed to serialize custom scan roots: {}", e))?;
-    db::set_setting(pool, "discover_custom_scan_roots", &json).await?;
-
-    // Return the new ScanRoot
-    Ok(ScanRoot {
-        path: path_str.clone(),
-        label: Path::new(&path_str)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(&path_str)
-            .to_string(),
-        exists: true,
-        enabled: true,
-        is_custom: true,
-    })
-}
-
-/// Remove a custom scan root directory.
-/// Only custom roots can be removed (is_custom=true).
-#[tauri::command]
-pub async fn remove_custom_scan_root(
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<(), String> {
-    let pool = &state.db;
-
-    // Load existing custom roots
-    let mut custom_paths: Vec<String> =
-        match db::get_setting(pool, "discover_custom_scan_roots").await? {
-            Some(json) => serde_json::from_str(&json)
-                .map_err(|e| format!("Invalid custom scan roots: {}", e))?,
-            None => Vec::new(),
-        };
-
-    // Remove the path
-    let initial_len = custom_paths.len();
-    custom_paths.retain(|p| p != &path);
-
-    if custom_paths.len() == initial_len {
-        return Err(format!("Custom scan root not found: {}", path));
-    }
-
-    // Save to DB
-    let json = serde_json::to_string(&custom_paths)
-        .map_err(|e| format!("Failed to serialize custom scan roots: {}", e))?;
-    db::set_setting(pool, "discover_custom_scan_roots", &json).await?;
-
-    // Also remove from enabled config if present
-    let mut config: HashMap<String, bool> =
-        match db::get_setting(pool, "discover_scan_roots_config").await? {
-            Some(json) => serde_json::from_str(&json)
-                .map_err(|e| format!("Invalid scan roots config: {}", e))?,
-            None => HashMap::new(),
-        };
-    config.remove(&path);
-    let json = serde_json::to_string(&config)
-        .map_err(|e| format!("Failed to serialize scan roots config: {}", e))?;
-    db::set_setting(pool, "discover_scan_roots_config", &json).await
-}
-
 /// Start a project-discovery scan across the given root directories.
 /// Emits streaming events (`discover:progress`, `discover:found`, `discover:complete`).
 #[tauri::command]
@@ -597,8 +479,7 @@ pub async fn start_project_scan(
     let patterns = platform_skill_patterns(pool);
 
     // Determine central skills dir.
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let central_dir = PathBuf::from(format!("{}/.agents/skills", home));
+    let central_dir = central_skills_dir();
 
     // Filter to enabled roots that exist.
     let enabled_roots: Vec<&ScanRoot> = roots.iter().filter(|r| r.enabled && r.exists).collect();
@@ -719,8 +600,7 @@ pub async fn get_discovered_skills(
     let rows = db::get_all_discovered_skills(pool).await?;
 
     // Convert DB rows to DiscoveredSkill structs, adding is_already_central.
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let central_dir = PathBuf::from(format!("{}/.agents/skills", home));
+    let central_dir = central_skills_dir();
 
     let skills: Vec<DiscoveredSkill> = rows
         .into_iter()
@@ -800,8 +680,7 @@ pub async fn import_discovered_skill_to_central(
         .ok_or_else(|| format!("Discovered skill '{}' not found", discovered_skill_id))?;
 
     // Determine central dir.
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let central_dir = PathBuf::from(format!("{}/.agents/skills", home));
+    let central_dir = central_skills_dir();
 
     // Extract the original skill directory name (last component of dir_path).
     let skill_dir_name = Path::new(&skill.dir_path)
@@ -899,7 +778,7 @@ pub async fn import_discovered_skill_to_platform(
 
     // Create symlink from discovered skill dir to platform dir.
     let src_path = Path::new(&skill.dir_path);
-    let relative_target = super::linker::make_relative_path(&agent_dir, src_path);
+    let relative_target = super::linker::symlink_target_path(&agent_dir, src_path);
     super::linker::create_symlink(&relative_target, &target_path)?;
 
     // Record the installation.
@@ -1378,7 +1257,7 @@ mod tests {
         }
 
         let src_path = Path::new(&skill.dir_path);
-        let relative_target = super::super::linker::make_relative_path(agent_dir, src_path);
+        let relative_target = super::super::linker::symlink_target_path(agent_dir, src_path);
         super::super::linker::create_symlink(&relative_target, &target_path)?;
 
         // Record the installation.
