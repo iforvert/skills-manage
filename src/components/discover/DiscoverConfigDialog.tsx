@@ -16,7 +16,7 @@ import { useDiscoverStore } from "@/stores/discoverStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { ScanRoot } from "@/types";
 import { describeSkillsPattern } from "@/lib/path";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 // ─── DiscoverConfigDialog ────────────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ export function DiscoverConfigDialog({ open, onOpenChange }: DiscoverConfigDialo
     setIsAddingDir(true);
     setAddError(null);
     try {
-      const selected = await open({
+      const selected = await openDialog({
         directory: true,
         multiple: false,
         title: t("discover.selectDirectory"),
