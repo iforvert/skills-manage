@@ -548,7 +548,7 @@ async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, String> {
     let central = db::get_agent_by_id(pool, "central")
         .await?
         .ok_or_else(|| "Central agent not found in database".to_string())?;
-    Ok(PathBuf::from(central.global_skills_dir))
+    Ok(crate::commands::linker::expand_tilde(&central.global_skills_dir))
 }
 
 async fn current_central_skill_ids(pool: &DbPool) -> Result<HashSet<String>, String> {
