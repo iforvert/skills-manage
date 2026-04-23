@@ -20,6 +20,8 @@ pub struct ScanRoot {
     pub label: String,
     pub exists: bool,
     pub enabled: bool,
+    #[serde(default)]
+    pub is_custom: bool,
 }
 
 /// A project-level skill discovered during a full-disk scan.
@@ -121,6 +123,7 @@ fn default_scan_roots() -> Vec<ScanRoot> {
                 label: label.to_string(),
                 exists,
                 enabled: exists, // auto-enable roots that exist
+                is_custom: false, // default roots are not custom
             }
         })
         .collect()
@@ -432,6 +435,27 @@ pub async fn get_scan_roots(state: State<'_, AppState>) -> Result<Vec<ScanRoot>,
         }
     }
 
+    // Load custom roots from settings.
+    // Stored as JSON array under "discover_custom_scan_roots".
+    if let Some(json) = db::get_setting(pool, "discover_custom_scan_roots").await? {
+        let custom_paths: Vec<String> =
+            serde_json::from_str(&json).map_err(|e| format!("Invalid custom scan roots: {}", e))?;
+        for path in custom_paths {
+            let exists = Path::new(&path).exists();
+            roots.push(ScanRoot {
+                path: path.clone(),
+                label: Path::new(&path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(&path)
+                    .to_string(),
+                exists,
+                enabled: exists,
+                is_custom: true,
+            });
+        }
+    }
+
     Ok(roots)
 }
 
@@ -457,6 +481,101 @@ pub async fn set_scan_root_enabled(
 
     config.insert(path, enabled);
 
+    let json = serde_json::to_string(&config)
+        .map_err(|e| format!("Failed to serialize scan roots config: {}", e))?;
+    db::set_setting(pool, "discover_scan_roots_config", &json).await
+}
+
+/// Add a custom scan root directory.
+/// Validates that the path exists and is not already in the list.
+#[tauri::command]
+pub async fn add_custom_scan_root(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<ScanRoot, String> {
+    let pool = &state.db;
+
+    // Expand ~ and validate path
+    let expanded = crate::path_utils::expand_home_path(&path);
+    if !expanded.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+
+    let path_str = crate::path_utils::path_to_string(&expanded);
+
+    // Load existing custom roots
+    let mut custom_paths: Vec<String> =
+        match db::get_setting(pool, "discover_custom_scan_roots").await? {
+            Some(json) => serde_json::from_str(&json)
+                .map_err(|e| format!("Invalid custom scan roots: {}", e))?,
+            None => Vec::new(),
+        };
+
+    // Check for duplicates
+    if custom_paths.contains(&path_str) {
+        return Err(format!("Path already in scan roots: {}", path));
+    }
+
+    // Add new path
+    custom_paths.push(path_str.clone());
+
+    // Save to DB
+    let json = serde_json::to_string(&custom_paths)
+        .map_err(|e| format!("Failed to serialize custom scan roots: {}", e))?;
+    db::set_setting(pool, "discover_custom_scan_roots", &json).await?;
+
+    // Return the new ScanRoot
+    Ok(ScanRoot {
+        path: path_str.clone(),
+        label: Path::new(&path_str)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&path_str)
+            .to_string(),
+        exists: true,
+        enabled: true,
+        is_custom: true,
+    })
+}
+
+/// Remove a custom scan root directory.
+/// Only custom roots can be removed (is_custom=true).
+#[tauri::command]
+pub async fn remove_custom_scan_root(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), String> {
+    let pool = &state.db;
+
+    // Load existing custom roots
+    let mut custom_paths: Vec<String> =
+        match db::get_setting(pool, "discover_custom_scan_roots").await? {
+            Some(json) => serde_json::from_str(&json)
+                .map_err(|e| format!("Invalid custom scan roots: {}", e))?,
+            None => Vec::new(),
+        };
+
+    // Remove the path
+    let initial_len = custom_paths.len();
+    custom_paths.retain(|p| p != &path);
+
+    if custom_paths.len() == initial_len {
+        return Err(format!("Custom scan root not found: {}", path));
+    }
+
+    // Save to DB
+    let json = serde_json::to_string(&custom_paths)
+        .map_err(|e| format!("Failed to serialize custom scan roots: {}", e))?;
+    db::set_setting(pool, "discover_custom_scan_roots", &json).await?;
+
+    // Also remove from enabled config if present
+    let mut config: HashMap<String, bool> =
+        match db::get_setting(pool, "discover_scan_roots_config").await? {
+            Some(json) => serde_json::from_str(&json)
+                .map_err(|e| format!("Invalid scan roots config: {}", e))?,
+            None => HashMap::new(),
+        };
+    config.remove(&path);
     let json = serde_json::to_string(&config)
         .map_err(|e| format!("Failed to serialize scan roots config: {}", e))?;
     db::set_setting(pool, "discover_scan_roots_config", &json).await
