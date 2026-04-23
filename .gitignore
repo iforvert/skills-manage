@@ -21,16 +21,16 @@ coverage/
 Thumbs.db
 /tmp/
 
-# Documentation and temporary files from development
-BUGFIX_TILDE_EXPANSION.md
-BUILD_COMPLETE.md
-COMMIT_MESSAGE.md
-FORK_AND_PUSH_GUIDE.md
-CREATE_RELEASE_GUIDE.md
-RUST_INSTALLATION_COMPLETE.md
-QUICK_START_FORK.md
+# Development documentation and temporary files
+*_COMPLETE.md
+*_GUIDE.md
+*_MESSAGE.md
+FEATURE_*.md
+BUGFIX_*.md
+CREATE_*.md
+RUST_*.md
 install.sh
 rust-env.sh
 setup-fork.sh
 commit-and-push.sh
-linker_tilde_test.rs
+*_test.rs
