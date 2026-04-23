@@ -6,6 +6,26 @@ use tauri::State;
 use crate::db::{self, DbPool, SkillInstallation};
 use crate::AppState;
 
+// ─── Path Expansion ───────────────────────────────────────────────────────────
+
+/// Expand `~` in a path to the user's home directory.
+///
+/// If the path starts with `~/`, it is replaced with the actual home directory path.
+/// Otherwise, the path is returned unchanged.
+///
+/// # Examples
+/// - `~/documents` -> `/Users/username/documents`
+/// - `/absolute/path` -> `/absolute/path`
+/// - `relative/path` -> `relative/path`
+pub fn expand_tilde(path: &str) -> PathBuf {
+    if path.starts_with("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(&path[2..]);
+        }
+    }
+    PathBuf::from(path)
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /// Result of a single skill install operation.
@@ -207,13 +227,13 @@ pub async fn install_skill_to_agent_impl(
         .await?
         .ok_or_else(|| "Central agent not found in database".to_string())?;
 
-    let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
+    let canonical_dir = expand_tilde(&central.global_skills_dir).join(skill_id);
 
     // 3. Ensure the skill exists in central (auto-centralize if needed).
     ensure_centralized(pool, skill_id, &canonical_dir).await?;
 
     // 4. Compute symlink location.
-    let agent_dir = PathBuf::from(&agent.global_skills_dir);
+    let agent_dir = expand_tilde(&agent.global_skills_dir);
     let symlink_path = agent_dir.join(skill_id);
 
     // 5. Ensure the agent's skills directory exists.
@@ -289,13 +309,13 @@ pub async fn install_skill_to_agent_copy_impl(
         .await?
         .ok_or_else(|| "Central agent not found in database".to_string())?;
 
-    let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
+    let canonical_dir = expand_tilde(&central.global_skills_dir).join(skill_id);
 
     // 3. Ensure the skill exists in central (auto-centralize if needed).
     ensure_centralized(pool, skill_id, &canonical_dir).await?;
 
     // 4. Compute target location.
-    let agent_dir = PathBuf::from(&agent.global_skills_dir);
+    let agent_dir = expand_tilde(&agent.global_skills_dir);
     let target_path = agent_dir.join(skill_id);
 
     // 5. Ensure the agent's skills directory exists.
@@ -362,7 +382,7 @@ pub async fn uninstall_skill_from_agent_impl(
         .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
 
     // 2. Compute the expected install location.
-    let install_path = PathBuf::from(&agent.global_skills_dir).join(skill_id);
+    let install_path = expand_tilde(&agent.global_skills_dir).join(skill_id);
 
     // 3. Look up the installation record to determine how it was installed.
     let installations = db::get_skill_installations(pool, skill_id).await?;

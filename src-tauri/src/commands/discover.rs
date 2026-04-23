@@ -132,16 +132,15 @@ fn platform_skill_patterns(_pool: &DbPool) -> Vec<(String, String, PathBuf)> {
     // (agent_id, display_name, relative_subpath)
     // We compute this synchronously since it only reads from the built-in
     // agent list which is static after init.
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
 
     db::builtin_agents()
         .iter()
         .filter(|a| a.id != "central")
         .filter_map(|a| {
-            let full = PathBuf::from(&a.global_skills_dir);
+            let full = crate::commands::linker::expand_tilde(&a.global_skills_dir);
             // Strip home prefix to get relative path like ".claude/skills"
-            let home_path = PathBuf::from(&home);
-            let rel = full.strip_prefix(&home_path).ok()?;
+            let rel = full.strip_prefix(&home).ok()?;
             Some((a.id.clone(), a.display_name.clone(), rel.to_path_buf()))
         })
         .collect()

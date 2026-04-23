@@ -179,7 +179,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
 
     // ── Per-agent scans ───────────────────────────────────────────────────────
     for agent in &agents {
-        let dir = Path::new(&agent.global_skills_dir);
+        let dir = crate::commands::linker::expand_tilde(&agent.global_skills_dir);
         let is_central = agent.category == "central";
 
         if !dir.exists() {
@@ -192,7 +192,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
         }
 
         let _ = db::update_agent_detected(pool, &agent.id, true).await;
-        let scanned = scan_directory(dir, is_central);
+        let scanned = scan_directory(&dir, is_central);
 
         let found_ids: Vec<String> = scanned.iter().map(|s| s.id.clone()).collect();
 
