@@ -130,18 +130,28 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
 
   /**
    * Toggle a single platform link for a skill.
-   * If linked, uninstalls; if not linked, installs via the backend default method.
-   * Refreshes the skill list afterward so linked_agents updates.
+   * Implements "single selection" semantics:
+   * - If clicking an unlinked agent: unlink all currently linked agents, then link the new one.
+   * - If clicking the currently linked agent: unlink it (toggle off).
    */
   togglePlatformLink: async (skillId, agentId) => {
     set({ togglingAgentId: agentId, error: null });
     try {
       const skill = get().skills.find((s) => s.id === skillId);
-      const isLinked = skill?.linked_agents.includes(agentId) ?? false;
+      const linkedAgents = skill?.linked_agents ?? [];
+      const isCurrentlyLinked = linkedAgents.includes(agentId);
 
-      if (isLinked) {
+      if (isCurrentlyLinked) {
+        // Toggle off: just uninstall
         await invoke("uninstall_skill_from_agent", { skillId, agentId });
       } else {
+        // Toggle on: first unlink all currently linked agents
+        const unlinkPromises = linkedAgents.map((linkedAgentId) =>
+          invoke("uninstall_skill_from_agent", { skillId, agentId: linkedAgentId })
+        );
+        await Promise.all(unlinkPromises);
+
+        // Then link the new agent
         await invoke("install_skill_to_agent", { skillId, agentId, method: "auto" });
       }
 
