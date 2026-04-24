@@ -238,21 +238,31 @@ pub async fn install_skill_to_agent_impl(
         return Err("Cannot install a skill to the central agent itself".to_string());
     }
 
+    // 获取数据库连接（不是事务）
+    let mut conn = pool.acquire().await.map_err(|e| format!("Failed to acquire connection: {}", e))?;
+    
     // 1. Look up the target agent.
-    let agent = db::get_agent_by_id(pool, agent_id)
-        .await?
+    let agent = sqlx::query_as::<_, db::Agent>("SELECT * FROM agents WHERE id = ?")
+        .bind(agent_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
     println!("[Rust install_skill_to_agent_impl] Agent found: {}", agent.display_name);
 
     // 2. Look up the central agent to determine the canonical root.
-    let central = db::get_agent_by_id(pool, "central")
-        .await?
+    let central = sqlx::query_as::<_, db::Agent>("SELECT * FROM agents WHERE id = ?")
+        .bind("central")
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| "Central agent not found in database".to_string())?;
 
     let canonical_dir = expand_tilde(&central.global_skills_dir).join(skill_id);
     println!("[Rust install_skill_to_agent_impl] Canonical dir: {:?}", canonical_dir);
 
     // 3. Ensure the skill exists in central (auto-centralize if needed).
+    // 注意：这里传入 pool，让 ensure_centralized 使用自己的连接
     ensure_centralized(pool, skill_id, &canonical_dir).await?;
 
     // 4. Compute symlink location.
@@ -294,7 +304,7 @@ pub async fn install_skill_to_agent_impl(
     println!("[Rust install_skill_to_agent_impl] Creating symlink: {:?} -> {:?}", symlink_path, relative_target);
     create_symlink(&relative_target, &symlink_path)?;
 
-    // 9. Persist the installation record.
+    // 9. Persist the installation record (使用同一个连接)
     println!("[Rust install_skill_to_agent_impl] BEFORE DB WRITE: checking existing records");
     let existing_installations = db::get_skill_installations(pool, skill_id).await?;
     println!("[Rust install_skill_to_agent_impl] Existing installations for {}: {:?}", skill_id, existing_installations.iter().map(|i| &i.agent_id).collect::<Vec<_>>());
@@ -308,15 +318,28 @@ pub async fn install_skill_to_agent_impl(
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     println!("[Rust install_skill_to_agent_impl] Calling upsert for skill={}, agent={}", skill_id, agent_id);
-    db::upsert_skill_installation(pool, &installation).await?;
     
-    // 10. 强制刷新 WAL，确保写入可见
-    sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-        .execute(pool)
-        .await
-        .ok(); // 忽略错误，某些 SQLite 版本可能不支持
+    // 使用同一个连接执行 upsert
+    sqlx::query(
+        "INSERT INTO skill_installations
+         (skill_id, agent_id, installed_path, link_type, symlink_target, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(skill_id, agent_id) DO UPDATE SET
+           installed_path = excluded.installed_path,
+           link_type      = excluded.link_type,
+           symlink_target = excluded.symlink_target",
+    )
+    .bind(&installation.skill_id)
+    .bind(&installation.agent_id)
+    .bind(&installation.installed_path)
+    .bind(&installation.link_type)
+    .bind(&installation.symlink_target)
+    .bind(&installation.created_at)
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| format!("Failed to upsert installation: {}", e))?;
     
-    println!("[Rust install_skill_to_agent_impl] AFTER DB WRITE + WAL CHECKPOINT: checking all records");
+    println!("[Rust install_skill_to_agent_impl] AFTER DB WRITE: checking all records");
     let all_installations = db::get_skill_installations(pool, skill_id).await?;
     println!("[Rust install_skill_to_agent_impl] All installations for {}: {:?}", skill_id, all_installations.iter().map(|i| &i.agent_id).collect::<Vec<_>>());
 
