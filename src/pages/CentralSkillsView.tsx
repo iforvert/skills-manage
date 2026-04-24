@@ -64,6 +64,19 @@ const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
     updated_at: "2026-04-17T00:00:00.000Z",
     linked_agents: ["claude-code"],
   },
+  {
+    id: "fixture-central-skill-2",
+    name: "fixture-central-skill-2",
+    description: "Second browser validation fixture for testing multi-skill agent linking.",
+    file_path: "~/.agents/skills/fixture-central-skill-2/SKILL.md",
+    canonical_path: "~/.agents/skills/fixture-central-skill-2",
+    is_central: true,
+    source: "browser-fixture",
+    scanned_at: "2026-04-17T00:00:00.000Z",
+    created_at: "2026-04-17T00:00:00.000Z",
+    updated_at: "2026-04-17T00:00:00.000Z",
+    linked_agents: [],
+  },
 ];
 
 const EMPTY_SKILLS: SkillWithLinks[] = [];
