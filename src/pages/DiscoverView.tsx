@@ -627,32 +627,15 @@ export function DiscoverView() {
                     scrollContainerRef={contentRef}
                     itemKey={(skill) => skill.id}
                     renderItem={(skill) => (
-                      <UnifiedSkillCard
+                      <DiscoverSkillCard
                         key={skill.id}
-                        name={skill.name}
-                        description={skill.description}
-                        checkbox={{
-                          checked: selectedSkillIds.has(skill.id),
-                          onChange: () => toggleSkillSelection(skill.id),
-                        }}
-                        isCentral={skill.is_already_central}
-                        platformBadge={{ id: skill.platform_id, name: skill.platform_name }}
-                        projectBadge={skill.project_name}
-                        onDetail={
-                          skill.is_already_central
-                            ? () => handleOpenDrawer(getPathBasename(skill.dir_path) ?? skill.id)
-                            : () => handleOpenDiscoverDrawer(skill)
-                        }
-                        detailButtonRef={(node) => setDetailButtonRef(
-                          skill.is_already_central
-                            ? (getPathBasename(skill.dir_path) ?? skill.id)
-                            : skill.id,
-                          node,
-                        )}
-                        onInstallToCentral={() => handleInstallToCentral(skill.id)}
-                        onInstallToPlatform={() => handleInstallToPlatform(skill)}
-                        isLoading={importingIds.has(skill.id)}
-                        className="h-[120px]"
+                        skill={skill}
+                        handleOpenDrawer={handleOpenDrawer}
+                        handleOpenDiscoverDrawer={handleOpenDiscoverDrawer}
+                        setDetailButtonRef={setDetailButtonRef}
+                        handleInstallToCentral={handleInstallToCentral}
+                        handleInstallToPlatform={handleInstallToPlatform}
+                        importingIds={importingIds}
                       />
                     )}
                   />
@@ -775,5 +758,58 @@ export function DiscoverView() {
         }
       />
     </div>
+  );
+}
+
+// ─── DiscoverSkillCard (fixes closure trap in VirtualizedList) ────────────────
+
+function DiscoverSkillCard({
+  skill,
+  handleOpenDrawer,
+  handleOpenDiscoverDrawer,
+  setDetailButtonRef,
+  handleInstallToCentral,
+  handleInstallToPlatform,
+  importingIds,
+}: {
+  skill: DiscoveredSkill;
+  handleOpenDrawer: (skillId: string) => void;
+  handleOpenDiscoverDrawer: (skill: DiscoveredSkill) => void;
+  setDetailButtonRef: (skillId: string, node: HTMLButtonElement | null) => void;
+  handleInstallToCentral: (skillId: string) => void;
+  handleInstallToPlatform: (skill: DiscoveredSkill) => void;
+  importingIds: Set<string>;
+}) {
+  // Subscribe to store changes directly to avoid closure trap
+  const isSelected = useDiscoverStore((state) => state.selectedSkillIds.has(skill.id));
+  const toggleSkillSelection = useDiscoverStore((state) => state.toggleSkillSelection);
+  
+  return (
+    <UnifiedSkillCard
+      name={skill.name}
+      description={skill.description}
+      checkbox={{
+        checked: isSelected,
+        onChange: () => toggleSkillSelection(skill.id),
+      }}
+      isCentral={skill.is_already_central}
+      platformBadge={{ id: skill.platform_id, name: skill.platform_name }}
+      projectBadge={skill.project_name}
+      onDetail={
+        skill.is_already_central
+          ? () => handleOpenDrawer(getPathBasename(skill.dir_path) ?? skill.id)
+          : () => handleOpenDiscoverDrawer(skill)
+      }
+      detailButtonRef={(node) => setDetailButtonRef(
+        skill.is_already_central
+          ? (getPathBasename(skill.dir_path) ?? skill.id)
+          : skill.id,
+        node,
+      )}
+      onInstallToCentral={() => handleInstallToCentral(skill.id)}
+      onInstallToPlatform={() => handleInstallToPlatform(skill)}
+      isLoading={importingIds.has(skill.id)}
+      className="h-[120px]"
+    />
   );
 }
