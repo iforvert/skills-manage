@@ -186,7 +186,6 @@ export function CentralSkillsView() {
   const togglePlatformLink =
     useCentralSkillsStore((state) => state.togglePlatformLink) ??
     noopTogglePlatformLink;
-  const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
 
   // Keep the platform sidebar counts in sync after install.
   const refreshCounts =
@@ -522,20 +521,16 @@ export function CentralSkillsView() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {sortedSkills.map((skill) => (
-              <UnifiedSkillCard
+              <CentralSkillCard
                 key={skill.id}
+                skillId={skill.id}
                 name={skill.name}
                 description={skill.description}
+                agents={agents}
                 onDetail={() => handleOpenDrawer(skill.id)}
                 onInstallTo={() => handleInstallClick(skill)}
                 detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
-                platformIcons={{
-                  agents,
-                  linkedAgents: skill.linked_agents,
-                  skillId: skill.id,
-                  onToggle: handleTogglePlatform,
-                  togglingAgentId,
-                }}
+                handleTogglePlatform={handleTogglePlatform}
               />
             ))}
           </div>
@@ -592,5 +587,50 @@ export function CentralSkillsView() {
         launcherLabel={t("central.title")}
       />
     </div>
+  );
+}
+
+// ─── CentralSkillCard (订阅 store 获取最新 linked_agents) ─────────────────────
+
+function CentralSkillCard({
+  skillId,
+  name,
+  description,
+  agents,
+  onDetail,
+  onInstallTo,
+  detailButtonRef,
+  handleTogglePlatform,
+}: {
+  skillId: string;
+  name: string;
+  description?: string;
+  agents: AgentWithStatus[];
+  onDetail: () => void;
+  onInstallTo: () => void;
+  detailButtonRef: (node: HTMLButtonElement | null) => void;
+  handleTogglePlatform: (skillId: string, agentId: string) => Promise<void>;
+}) {
+  // 直接订阅 store 获取最新的 linked_agents
+  const linkedAgents = useCentralSkillsStore(
+    (state) => state.skills.find((s) => s.id === skillId)?.linked_agents ?? []
+  );
+  const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
+
+  return (
+    <UnifiedSkillCard
+      name={name}
+      description={description}
+      onDetail={onDetail}
+      onInstallTo={onInstallTo}
+      detailButtonRef={detailButtonRef}
+      platformIcons={{
+        agents,
+        linkedAgents,
+        skillId,
+        onToggle: handleTogglePlatform,
+        togglingAgentId,
+      }}
+    />
   );
 }

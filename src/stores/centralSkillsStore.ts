@@ -138,15 +138,19 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
     try {
       const skill = get().skills.find((s) => s.id === skillId);
       const isLinked = skill?.linked_agents.includes(agentId) ?? false;
+      console.log(`[togglePlatformLink] skill=${skillId}, agent=${agentId}, isLinked=${isLinked}`);
 
       if (isLinked) {
         await invoke("uninstall_skill_from_agent", { skillId, agentId });
+        console.log(`[togglePlatformLink] uninstalled ${skillId} from ${agentId}`);
       } else {
         await invoke("install_skill_to_agent", { skillId, agentId, method: "auto" });
+        console.log(`[togglePlatformLink] installed ${skillId} to ${agentId}`);
       }
 
       // Refresh skills to get accurate linked_agents status
       const skills = await invoke<SkillWithLinks[]>("get_central_skills");
+      console.log(`[togglePlatformLink] refreshed skills:`, skills.map(s => ({ id: s.id, linked: s.linked_agents })));
       set({ skills, togglingAgentId: null });
     } catch (err) {
       set({ error: String(err), togglingAgentId: null });
