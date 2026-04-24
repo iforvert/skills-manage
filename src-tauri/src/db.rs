@@ -1341,6 +1341,22 @@ pub async fn get_skill_installations(
         .map_err(|e| e.to_string())
 }
 
+/// Retrieve installation record for a specific skill-agent pair.
+pub async fn get_skill_installation(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+) -> Result<Option<SkillInstallation>, String> {
+    sqlx::query_as::<_, SkillInstallation>(
+        "SELECT * FROM skill_installations WHERE skill_id = ? AND agent_id = ?",
+    )
+    .bind(skill_id)
+    .bind(agent_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
 // ─── Agents ───────────────────────────────────────────────────────────────────
 
 /// Retrieve all agents.

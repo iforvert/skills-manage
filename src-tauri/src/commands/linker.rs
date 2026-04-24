@@ -267,8 +267,15 @@ pub async fn install_skill_to_agent_impl(
                 .map_err(|e| format!("Failed to remove existing symlink: {}", e))?;
         }
         Ok(meta) if meta.is_dir() => {
+            // Check if there's already an installation record for this.
+            let existing_installation = db::get_skill_installation(pool, skill_id, agent_id).await?;
+            if existing_installation.is_some() {
+                // Directory is tracked in DB - this is fine, return success.
+                return Ok(InstallResult { symlink_path: symlink_path.to_string_lossy().into_owned() });
+            }
+            // Directory exists but not tracked. Refuse to overwrite for safety.
             return Err(format!(
-                "A real directory already exists at '{}'. Refusing to overwrite.",
+                "A real directory already exists at '{}' but is not tracked in the database. Please remove it manually or use copy method instead.",
                 symlink_path.display()
             ));
         }
@@ -373,8 +380,15 @@ pub async fn install_skill_to_agent_copy_impl(
                 .map_err(|e| format!("Failed to remove existing symlink: {}", e))?;
         }
         Ok(meta) if meta.is_dir() => {
+            // Check if there's already an installation record for this.
+            let existing_installation = db::get_skill_installation(pool, skill_id, agent_id).await?;
+            if existing_installation.is_some() {
+                // Directory is tracked in DB - this is fine, return success.
+                return Ok(InstallResult { symlink_path: target_path.to_string_lossy().into_owned() });
+            }
+            // Directory exists but not tracked. Refuse to overwrite for safety.
             return Err(format!(
-                "A real directory already exists at '{}'. Refusing to overwrite.",
+                "A real directory already exists at '{}' but is not tracked in the database. Please remove it manually first.",
                 target_path.display()
             ));
         }
