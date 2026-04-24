@@ -231,6 +231,8 @@ pub async fn install_skill_to_agent_impl(
     skill_id: &str,
     agent_id: &str,
 ) -> Result<InstallResult, String> {
+    println!("[Rust install_skill_to_agent_impl] START: skill={}, agent={}", skill_id, agent_id);
+    
     // Guard: cannot install to the central agent itself.
     if agent_id == "central" {
         return Err("Cannot install a skill to the central agent itself".to_string());
@@ -240,6 +242,7 @@ pub async fn install_skill_to_agent_impl(
     let agent = db::get_agent_by_id(pool, agent_id)
         .await?
         .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+    println!("[Rust install_skill_to_agent_impl] Agent found: {}", agent.display_name);
 
     // 2. Look up the central agent to determine the canonical root.
     let central = db::get_agent_by_id(pool, "central")
@@ -247,6 +250,7 @@ pub async fn install_skill_to_agent_impl(
         .ok_or_else(|| "Central agent not found in database".to_string())?;
 
     let canonical_dir = expand_tilde(&central.global_skills_dir).join(skill_id);
+    println!("[Rust install_skill_to_agent_impl] Canonical dir: {:?}", canonical_dir);
 
     // 3. Ensure the skill exists in central (auto-centralize if needed).
     ensure_centralized(pool, skill_id, &canonical_dir).await?;
@@ -254,6 +258,7 @@ pub async fn install_skill_to_agent_impl(
     // 4. Compute symlink location.
     let agent_dir = expand_tilde(&agent.global_skills_dir);
     let symlink_path = agent_dir.join(skill_id);
+    println!("[Rust install_skill_to_agent_impl] Symlink path: {:?}", symlink_path);
 
     // 5. Ensure the agent's skills directory exists.
     std::fs::create_dir_all(&agent_dir)
@@ -263,11 +268,13 @@ pub async fn install_skill_to_agent_impl(
     match std::fs::symlink_metadata(&symlink_path) {
         Ok(meta) if meta.file_type().is_symlink() => {
             // Remove stale symlink so we can replace it.
+            println!("[Rust install_skill_to_agent_impl] Removing existing symlink");
             std::fs::remove_file(&symlink_path)
                 .map_err(|e| format!("Failed to remove existing symlink: {}", e))?;
         }
         Ok(meta) if meta.is_dir() => {
             // Directory already exists. Remove it and proceed with installation.
+            println!("[Rust install_skill_to_agent_impl] Removing existing directory");
             std::fs::remove_dir_all(&symlink_path)
                 .map_err(|e| format!("Failed to remove existing directory '{}': {}", symlink_path.display(), e))?;
         }
@@ -284,9 +291,14 @@ pub async fn install_skill_to_agent_impl(
     let relative_target = symlink_target_path(&agent_dir, &canonical_dir);
 
     // 8. Create the symlink.
+    println!("[Rust install_skill_to_agent_impl] Creating symlink: {:?} -> {:?}", symlink_path, relative_target);
     create_symlink(&relative_target, &symlink_path)?;
 
     // 9. Persist the installation record.
+    println!("[Rust install_skill_to_agent_impl] BEFORE DB WRITE: checking existing records");
+    let existing_installations = db::get_skill_installations(pool, skill_id).await?;
+    println!("[Rust install_skill_to_agent_impl] Existing installations for {}: {:?}", skill_id, existing_installations.iter().map(|i| &i.agent_id).collect::<Vec<_>>());
+    
     let installation = SkillInstallation {
         skill_id: skill_id.to_string(),
         agent_id: agent_id.to_string(),
@@ -295,7 +307,12 @@ pub async fn install_skill_to_agent_impl(
         symlink_target: Some(canonical_dir.to_string_lossy().into_owned()),
         created_at: chrono::Utc::now().to_rfc3339(),
     };
+    println!("[Rust install_skill_to_agent_impl] Calling upsert for skill={}, agent={}", skill_id, agent_id);
     db::upsert_skill_installation(pool, &installation).await?;
+    
+    println!("[Rust install_skill_to_agent_impl] AFTER DB WRITE: checking all records");
+    let all_installations = db::get_skill_installations(pool, skill_id).await?;
+    println!("[Rust install_skill_to_agent_impl] All installations for {}: {:?}", skill_id, all_installations.iter().map(|i| &i.agent_id).collect::<Vec<_>>());
 
     Ok(InstallResult {
         symlink_path: symlink_path.to_string_lossy().into_owned(),
