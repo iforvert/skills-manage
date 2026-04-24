@@ -159,15 +159,17 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
         console.log(`[togglePlatformLink] uninstalled ${skillId} from ${agentId}`);
       } else {
         console.log(`[togglePlatformLink] calling install_skill_to_agent...`);
-        await invoke("install_skill_to_agent", { skillId, agentId, method: "auto" });
-        console.log(`[togglePlatformLink] installed ${skillId} to ${agentId}`);
+        const result = await invoke("install_skill_to_agent", { skillId, agentId, method: "auto" });
+        console.log(`[togglePlatformLink] installed ${skillId} to ${agentId}, result:`, result);
       }
 
       // Refresh skills to get accurate linked_agents status
       console.log(`[togglePlatformLink] calling get_central_skills...`);
       const skills = await invoke<SkillWithLinks[]>("get_central_skills");
       console.log(`[togglePlatformLink] refreshed skills:`, skills.map(s => ({ id: s.id, linked: s.linked_agents })));
-      set({ skills, togglingAgentId: null });
+      
+      // 强制触发重新渲染
+      set({ skills: [...skills], togglingAgentId: null });
     } catch (err) {
       console.error(`[togglePlatformLink] error:`, err);
       set({ error: String(err), togglingAgentId: null });

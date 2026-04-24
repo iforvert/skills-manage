@@ -310,7 +310,13 @@ pub async fn install_skill_to_agent_impl(
     println!("[Rust install_skill_to_agent_impl] Calling upsert for skill={}, agent={}", skill_id, agent_id);
     db::upsert_skill_installation(pool, &installation).await?;
     
-    println!("[Rust install_skill_to_agent_impl] AFTER DB WRITE: checking all records");
+    // 10. 强制刷新 WAL，确保写入可见
+    sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(pool)
+        .await
+        .ok(); // 忽略错误，某些 SQLite 版本可能不支持
+    
+    println!("[Rust install_skill_to_agent_impl] AFTER DB WRITE + WAL CHECKPOINT: checking all records");
     let all_installations = db::get_skill_installations(pool, skill_id).await?;
     println!("[Rust install_skill_to_agent_impl] All installations for {}: {:?}", skill_id, all_installations.iter().map(|i| &i.agent_id).collect::<Vec<_>>());
 
